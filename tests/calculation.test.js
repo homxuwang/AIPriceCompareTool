@@ -37,6 +37,8 @@ test('builds image comparison row from plan-credit pricing', () => {
 
   assert.equal(row.convertedUnitCost, 1.95);
   assert.equal(row.singleRunCost, 1.95);
+  assert.equal(row.unitUsageDescription, 'per_image: 20');
+  assert.equal(row.totalCredits, 400);
 });
 
 test('builds text comparison row from direct pricing', () => {
@@ -65,4 +67,28 @@ test('builds text comparison row from direct pricing', () => {
 
   assert.equal(row.convertedUnitCost, 1.44);
   assert.equal(row.singleRunCost, 2.88);
+});
+
+test('treats missing text output pricing as zero', () => {
+  const row = buildComparisonRow({
+    platform: { name: 'Lite AI' },
+    model: { name: 'gpt-lite', category: 'text' },
+    plan: null,
+    rule: {
+      pricingMode: 'direct_price_based',
+      currency: 'USD',
+      unitDefinitions: [{ unitType: 'per_1k_input_tokens', value: 0.1 }],
+    },
+    scenario: {
+      imageCount: 1,
+      textInputTokens: 2000,
+      textOutputTokens: 500,
+      videoSeconds: 5,
+      audioMinutes: 1,
+    },
+    exchangeRates: { baseCurrency: 'CNY', rates: { CNY: 1, USD: 7.2 } },
+    targetCurrency: 'CNY',
+  });
+
+  assert.equal(row.singleRunCost, 1.44);
 });

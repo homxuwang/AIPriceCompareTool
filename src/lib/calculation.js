@@ -57,7 +57,17 @@ export function buildComparisonRow({
     category: model.category,
     pricingMode: rule.pricingMode,
     planName: plan?.name ?? '',
+    planTotalPrice: plan?.price ?? null,
+    totalCredits: plan?.creditAmount ?? null,
+    exchangeRate:
+      exchangeRates.rates[unitCosts[0]?.sourceCurrency ?? targetCurrency] /
+      exchangeRates.rates[targetCurrency],
+    unitUsageDescription: rule.unitDefinitions
+      .map((unitDefinition) => `${unitDefinition.unitType}: ${unitDefinition.value}`)
+      .join(', '),
     convertedUnitCost: unitCosts[0]?.convertedUnitCost ?? 0,
+    originalUnitCost: unitCosts[0]?.originalUnitCost ?? 0,
+    originalCurrency: unitCosts[0]?.sourceCurrency ?? targetCurrency,
     singleRunCost,
     unitCosts,
   };
