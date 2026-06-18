@@ -1,0 +1,8 @@
+{
+  "name": "ai-saas-price-compare-extension",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

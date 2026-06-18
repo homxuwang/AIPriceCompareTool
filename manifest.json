@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "AI SaaS Price Compare",
+  "version": "0.1.0",
+  "description": "Compare third-party AI SaaS model pricing with manual plan and credit inputs.",
+  "options_page": "src/options/options.html",
+  "permissions": ["storage"]
+}
