@@ -11,6 +11,10 @@ import {
   buildComparisonRows,
   buildUnitDefinitions,
 } from './helpers.js';
+import {
+  buildCalculationSections,
+  createTranslator,
+} from './messages.js';
 
 const app = document.querySelector('#app');
 const repository = canUseChromeStorage()
@@ -33,18 +37,21 @@ function canUseChromeStorage() {
 }
 
 function render() {
+  const locale = getLocale();
+  const t = createTranslator(locale);
+
   app.innerHTML = `
     <main class="app">
       <header class="hero">
         <div class="hero-copy">
-          <h1>AI SaaS 比价工作台</h1>
-          <p>左侧录入数据，中间配置参数和对比条件，右侧稳定输出结果表。</p>
+          <h1>${t('app.title')}</h1>
+          <p>${t('app.subtitle')}</p>
         </div>
         <div class="toolbar">
-          <button class="button-secondary" id="reset-demo" type="button">载入示例数据</button>
-          <button id="export-json" type="button">导出 JSON</button>
+          <button class="button-secondary" id="reset-demo" type="button">${t('app.loadDemo')}</button>
+          <button id="export-json" type="button">${t('app.exportJson')}</button>
           <label class="button-like import-button button-secondary">
-            导入 JSON
+            ${t('app.importJson')}
             <input id="import-json" type="file" accept="application/json">
           </label>
         </div>
@@ -53,65 +60,66 @@ function render() {
       ${flash ? `<p class="status ${flash.type === 'error' ? 'error' : ''}">${flash.message}</p>` : ''}
 
       <section class="metrics-bar">
-        ${renderMetric('网站', state.platforms.length)}
-        ${renderMetric('套餐', state.plans.length)}
-        ${renderMetric('模型', state.models.length)}
-        ${renderMetric('规则', state.rules.length)}
-        ${renderMetric('结果币种', escapeHtml(state.preferences?.targetCurrency ?? 'CNY'))}
+        ${renderMetric(t('metrics.platforms'), state.platforms.length)}
+        ${renderMetric(t('metrics.plans'), state.plans.length)}
+        ${renderMetric(t('metrics.models'), state.models.length)}
+        ${renderMetric(t('metrics.rules'), state.rules.length)}
+        ${renderMetric(t('metrics.currency'), escapeHtml(state.preferences?.targetCurrency ?? 'CNY'))}
       </section>
 
       <div class="workspace-grid">
         <section class="panel panel-column">
           <div class="panel-header">
-            <h2>第一列：数据录入</h2>
-            <p>网站、套餐、模型、规则都集中在这一列，用 tab 切换录入焦点。</p>
+            <h2>${t('entry.title')}</h2>
+            <p>${t('entry.subtitle')}</p>
           </div>
           <div class="tab-strip">
-            ${renderTabButton('entry', 'platforms', '网站')}
-            ${renderTabButton('entry', 'plans', '套餐')}
-            ${renderTabButton('entry', 'models', '模型')}
-            ${renderTabButton('entry', 'rules', '规则')}
+            ${renderTabButton('entry', 'platforms', t('entry.platforms'))}
+            ${renderTabButton('entry', 'plans', t('entry.plans'))}
+            ${renderTabButton('entry', 'models', t('entry.models'))}
+            ${renderTabButton('entry', 'rules', t('entry.rules'))}
           </div>
           <div class="panel-body stack">
-            ${renderEntryTabContent()}
+            ${renderEntryTabContent(t)}
           </div>
         </section>
 
         <section class="panel panel-column">
           <div class="panel-header">
-            <h2>第二列：参数与对比</h2>
-            <p>汇率放在整体参数里，对比条件单独做一页，避免两个概念混在一起。</p>
+            <h2>${t('controls.title')}</h2>
+            <p>${t('controls.subtitle')}</p>
           </div>
           <div class="tab-strip">
-            ${renderTabButton('controls', 'settings', '整体参数')}
-            ${renderTabButton('controls', 'comparison', '对比设置')}
+            ${renderTabButton('controls', 'settings', t('controls.settings'))}
+            ${renderTabButton('controls', 'comparison', t('controls.comparison'))}
+            ${renderTabButton('controls', 'calculation', t('controls.calculation'))}
           </div>
           <div class="panel-body stack">
-            ${renderControlsTabContent()}
+            ${renderControlsTabContent(t, locale)}
           </div>
         </section>
 
         <section class="panel panel-column panel-result">
           <div class="panel-header">
-            <h2>第三列：结果输出</h2>
-            <p>结果区固定存在，不做 tab，生成后可以一直盯着看。</p>
+            <h2>${t('results.title')}</h2>
+            <p>${t('results.subtitle')}</p>
           </div>
           <div class="result-summary">
             <div>
               <strong>${comparisonRows.length}</strong>
-              <span>结果条数</span>
+              <span>${t('results.count')}</span>
             </div>
             <div>
               <strong>${escapeHtml(state.preferences?.targetCurrency ?? 'CNY')}</strong>
-              <span>目标币种</span>
+              <span>${t('results.currency')}</span>
             </div>
             <div>
-              <strong>${state.exchangeRates.updatedAt ? '已配置' : '未配置'}</strong>
-              <span>汇率状态</span>
+              <strong>${state.exchangeRates.updatedAt ? t('results.configured') : t('results.unconfigured')}</strong>
+              <span>${t('results.exchangeRateStatus')}</span>
             </div>
           </div>
           <div class="table-wrap">
-            ${renderResultsTable()}
+            ${renderResultsTable(t)}
           </div>
         </section>
       </div>
@@ -119,6 +127,14 @@ function render() {
   `;
 
   bindEvents();
+}
+
+function getLocale() {
+  return state.preferences?.locale ?? 'zh-CN';
+}
+
+function t(path) {
+  return createTranslator(getLocale())(path);
 }
 
 function renderMetric(label, value) {
@@ -144,111 +160,112 @@ function renderTabButton(group, value, label) {
   `;
 }
 
-function renderEntryTabContent() {
+function renderEntryTabContent(translate) {
   switch (tabState.entry) {
     case 'platforms':
       return `
-        ${renderPlatformForm()}
-        ${renderCards('已录入网站', state.platforms, renderPlatformCard)}
+        ${renderPlatformForm(translate)}
+        ${renderCards(translate('entry.savedPlatforms'), state.platforms, (item) => renderPlatformCard(item, translate), translate)}
       `;
     case 'plans':
       return `
-        ${renderPlanForm()}
-        ${renderCards('已录入套餐', state.plans, renderPlanCard)}
+        ${renderPlanForm(translate)}
+        ${renderCards(translate('entry.savedPlans'), state.plans, (item) => renderPlanCard(item, translate), translate)}
       `;
     case 'models':
       return `
-        ${renderModelForm()}
-        ${renderCards('已录入模型', state.models, renderModelCard)}
+        ${renderModelForm(translate)}
+        ${renderCards(translate('entry.savedModels'), state.models, (item) => renderModelCard(item), translate)}
       `;
     case 'rules':
       return `
-        ${renderRuleForm()}
-        ${renderCards('已录入规则', state.rules, renderRuleCard)}
+        ${renderRuleForm(translate)}
+        ${renderCards(translate('entry.savedRules'), state.rules, (item) => renderRuleCard(item, translate), translate)}
       `;
     default:
       return '';
   }
 }
 
-function renderControlsTabContent() {
+function renderControlsTabContent(translate, locale) {
   switch (tabState.controls) {
     case 'settings':
       return `
-        <div class="subpanel-note">
-          汇率、默认场景和默认结果币种都放在这里保存。对比页只负责筛选和生成。
-        </div>
-        ${renderSettingsForm()}
+        <div class="subpanel-note">${translate('controls.settingsNote')}</div>
+        ${renderSettingsForm(translate)}
       `;
     case 'comparison':
       return `
-        <div class="subpanel-note">
-          当前会以已保存的整体参数为默认值；你可以只调整这次对比的筛选和场景覆盖值。
-        </div>
-        ${renderComparisonForm()}
+        <div class="subpanel-note">${translate('controls.comparisonNote')}</div>
+        ${renderComparisonForm(translate)}
+      `;
+    case 'calculation':
+      return `
+        <div class="subpanel-note">${translate('controls.calculationNote')}</div>
+        ${renderCalculationSections(locale)}
       `;
     default:
       return '';
   }
 }
 
-function renderPlatformForm() {
+function renderPlatformForm(translate) {
   return `
     <section>
       <div class="section-title">
-        <h3>新建网站</h3>
-        <p>第三方 SaaS 平台的基础信息。</p>
+        <h3>${translate('forms.platformTitle')}</h3>
+        <p>${translate('forms.platformHint')}</p>
       </div>
       <form class="grid-form" id="platform-form">
         <div class="field">
-          <label for="platform-name">网站名</label>
+          <label for="platform-name">${translate('forms.platformName')}</label>
           <input id="platform-name" name="name" required>
         </div>
         <div class="field">
-          <label for="platform-currency">默认币种</label>
+          <label for="platform-currency">${translate('forms.defaultCurrency')}</label>
           <input id="platform-currency" name="defaultCurrency" value="CNY" required>
         </div>
         <div class="field span-2">
-          <label for="platform-notes">备注</label>
+          <label for="platform-notes">${translate('forms.notes')}</label>
           <textarea id="platform-notes" name="notes"></textarea>
         </div>
         <div class="field span-2">
-          <button type="submit">保存网站</button>
+          <button type="submit">${translate('forms.savePlatform')}</button>
         </div>
       </form>
     </section>
   `;
 }
 
-function renderPlanForm() {
+function renderPlanForm(translate) {
   return `
     <section>
       <div class="section-title">
-        <h3>新建套餐</h3>
-        <p>录入价格、周期和积分总量，供后续积分折算使用。</p>
+        <h3>${translate('forms.planTitle')}</h3>
+        <p>${translate('forms.planHint')}</p>
       </div>
       <form class="grid-form compact" id="plan-form">
         <div class="field">
-          <label for="plan-platform-id">所属网站</label>
+          <label for="plan-platform-id">${translate('forms.platformOwner')}</label>
           <select id="plan-platform-id" name="platformId" required>
             <option value="">请选择</option>
             ${state.platforms.map((platform) => `<option value="${platform.id}">${platform.name}</option>`).join('')}
           </select>
         </div>
         <div class="field">
-          <label for="plan-name">套餐名</label>
+          <label for="plan-name">${translate('forms.planName')}</label>
           <input id="plan-name" name="name" required>
         </div>
         <div class="field">
-          <label for="plan-price">价格</label>
+          <label for="plan-price">${translate('forms.price')}</label>
           <input id="plan-price" name="price" type="number" step="0.000001" required>
         </div>
         <div class="field">
-          <label for="plan-currency">币种</label>
+          <label for="plan-currency">${translate('forms.currency')}</label>
           <input id="plan-currency" name="currency" value="CNY" required>
         </div>
         <div class="field">
-          <label for="plan-cycle">周期</label>
+          <label for="plan-cycle">${translate('forms.cycle')}</label>
           <select id="plan-cycle" name="billingCycle">
             <option value="monthly">monthly</option>
             <option value="yearly">yearly</option>
@@ -257,35 +274,35 @@ function renderPlanForm() {
           </select>
         </div>
         <div class="field">
-          <label for="plan-credits">积分数量</label>
+          <label for="plan-credits">${translate('forms.credits')}</label>
           <input id="plan-credits" name="creditAmount" type="number" step="0.000001">
         </div>
         <div class="field span-3">
-          <label for="plan-notes">备注</label>
+          <label for="plan-notes">${translate('forms.notes')}</label>
           <textarea id="plan-notes" name="notes"></textarea>
         </div>
         <div class="field span-3">
-          <button type="submit">保存套餐</button>
+          <button type="submit">${translate('forms.savePlan')}</button>
         </div>
       </form>
     </section>
   `;
 }
 
-function renderModelForm() {
+function renderModelForm(translate) {
   return `
     <section>
       <div class="section-title">
-        <h3>新建模型</h3>
-        <p>模型是跨平台复用的对比对象。</p>
+        <h3>${translate('forms.modelTitle')}</h3>
+        <p>${translate('forms.modelHint')}</p>
       </div>
       <form class="grid-form" id="model-form">
         <div class="field">
-          <label for="model-name">模型名</label>
+          <label for="model-name">${translate('forms.modelName')}</label>
           <input id="model-name" name="name" required>
         </div>
         <div class="field">
-          <label for="model-category">模型类型</label>
+          <label for="model-category">${translate('forms.category')}</label>
           <select id="model-category" name="category" required>
             <option value="text">text</option>
             <option value="image">image</option>
@@ -294,94 +311,94 @@ function renderModelForm() {
           </select>
         </div>
         <div class="field span-2">
-          <button type="submit">保存模型</button>
+          <button type="submit">${translate('forms.saveModel')}</button>
         </div>
       </form>
     </section>
   `;
 }
 
-function renderRuleForm() {
+function renderRuleForm(translate) {
   return `
     <section>
       <div class="section-title">
-        <h3>新建规则</h3>
-        <p>把网站、模型和计费方式连起来，支持积分折算和直接价格。</p>
+        <h3>${translate('forms.ruleTitle')}</h3>
+        <p>${translate('forms.ruleHint')}</p>
       </div>
       <form class="grid-form compact" id="rule-form">
         <div class="field">
-          <label for="rule-platform-id">网站</label>
+          <label for="rule-platform-id">${translate('forms.platform')}</label>
           <select id="rule-platform-id" name="platformId" required>
             <option value="">请选择</option>
             ${state.platforms.map((platform) => `<option value="${platform.id}">${platform.name}</option>`).join('')}
           </select>
         </div>
         <div class="field">
-          <label for="rule-model-id">模型</label>
+          <label for="rule-model-id">${translate('forms.model')}</label>
           <select id="rule-model-id" name="modelId" required>
             <option value="">请选择</option>
             ${state.models.map((model) => `<option value="${model.id}">${model.name} (${model.category})</option>`).join('')}
           </select>
         </div>
         <div class="field">
-          <label for="rule-mode">计费模式</label>
+          <label for="rule-mode">${translate('forms.pricingMode')}</label>
           <select id="rule-mode" name="pricingMode" required>
             <option value="plan_credit_based">plan_credit_based</option>
             <option value="direct_price_based">direct_price_based</option>
           </select>
         </div>
         <div class="field">
-          <label for="rule-plan-id">关联套餐</label>
+          <label for="rule-plan-id">${translate('forms.linkedPlan')}</label>
           <select id="rule-plan-id" name="planId">
             <option value="">可留空</option>
             ${state.plans.map((plan) => `<option value="${plan.id}">${plan.name}</option>`).join('')}
           </select>
         </div>
         <div class="field">
-          <label for="rule-currency">直接价格币种</label>
+          <label for="rule-currency">${translate('forms.directCurrency')}</label>
           <input id="rule-currency" name="currency" value="USD">
         </div>
         <div class="field">
-          <label for="rule-notes">备注</label>
+          <label for="rule-notes">${translate('forms.notes')}</label>
           <input id="rule-notes" name="notes">
         </div>
         <div class="field">
-          <label for="text-input-value">文本输入 / 1K</label>
+          <label for="text-input-value">${translate('forms.textInputPer1k')}</label>
           <input id="text-input-value" name="textInputValue" type="number" step="0.000001">
         </div>
         <div class="field">
-          <label for="text-output-value">文本输出 / 1K</label>
+          <label for="text-output-value">${translate('forms.textOutputPer1k')}</label>
           <input id="text-output-value" name="textOutputValue" type="number" step="0.000001">
         </div>
         <div class="field">
-          <label for="image-value">图片 / 张</label>
+          <label for="image-value">${translate('forms.imagePerUnit')}</label>
           <input id="image-value" name="imageValue" type="number" step="0.000001">
         </div>
         <div class="field">
-          <label for="video-second-value">视频 / 秒</label>
+          <label for="video-second-value">${translate('forms.videoPerSecond')}</label>
           <input id="video-second-value" name="videoSecondValue" type="number" step="0.000001">
         </div>
         <div class="field">
-          <label for="video-minute-value">视频 / 分钟</label>
+          <label for="video-minute-value">${translate('forms.videoPerMinute')}</label>
           <input id="video-minute-value" name="videoMinuteValue" type="number" step="0.000001">
         </div>
         <div class="field">
-          <label for="audio-second-value">音频 / 秒</label>
+          <label for="audio-second-value">${translate('forms.audioPerSecond')}</label>
           <input id="audio-second-value" name="audioSecondValue" type="number" step="0.000001">
         </div>
         <div class="field">
-          <label for="audio-minute-value">音频 / 分钟</label>
+          <label for="audio-minute-value">${translate('forms.audioPerMinute')}</label>
           <input id="audio-minute-value" name="audioMinuteValue" type="number" step="0.000001">
         </div>
         <div class="field span-3">
-          <button type="submit">保存规则</button>
+          <button type="submit">${translate('forms.saveRule')}</button>
         </div>
       </form>
     </section>
   `;
 }
 
-function renderSettingsForm() {
+function renderSettingsForm(translate) {
   const rates = {
     ...DEFAULT_EXCHANGE_RATES.rates,
     ...state.exchangeRates.rates,
@@ -402,103 +419,120 @@ function renderSettingsForm() {
         <input id="rate-hkd" name="HKD" type="number" step="0.000001" value="${rates.HKD ?? 0.92}">
       </div>
       <div class="field">
-        <label for="target-currency">默认结果币种</label>
+        <label for="target-currency">${translate('forms.targetCurrency')}</label>
         <input id="target-currency" name="targetCurrency" value="${escapeHtml(state.preferences?.targetCurrency ?? 'CNY')}">
       </div>
       <div class="field">
-        <label for="scenario-input">默认文本输入 tokens</label>
+        <label for="scenario-input">${translate('forms.defaultTextInput')}</label>
         <input id="scenario-input" name="textInputTokens" type="number" step="1" value="${state.scenarioDefaults.textInputTokens ?? DEFAULT_SCENARIO.textInputTokens}">
       </div>
       <div class="field">
-        <label for="scenario-output">默认文本输出 tokens</label>
+        <label for="scenario-output">${translate('forms.defaultTextOutput')}</label>
         <input id="scenario-output" name="textOutputTokens" type="number" step="1" value="${state.scenarioDefaults.textOutputTokens ?? DEFAULT_SCENARIO.textOutputTokens}">
       </div>
       <div class="field">
-        <label for="scenario-images">默认图片张数</label>
+        <label for="scenario-images">${translate('forms.defaultImageCount')}</label>
         <input id="scenario-images" name="imageCount" type="number" step="1" value="${state.scenarioDefaults.imageCount ?? DEFAULT_SCENARIO.imageCount}">
       </div>
       <div class="field">
-        <label for="scenario-video">默认视频秒数</label>
+        <label for="scenario-video">${translate('forms.defaultVideoSeconds')}</label>
         <input id="scenario-video" name="videoSeconds" type="number" step="1" value="${state.scenarioDefaults.videoSeconds ?? DEFAULT_SCENARIO.videoSeconds}">
       </div>
       <div class="field">
-        <label for="scenario-audio">默认音频分钟</label>
+        <label for="scenario-audio">${translate('forms.defaultAudioMinutes')}</label>
         <input id="scenario-audio" name="audioMinutes" type="number" step="1" value="${state.scenarioDefaults.audioMinutes ?? DEFAULT_SCENARIO.audioMinutes}">
       </div>
       <div class="field span-3">
-        <button type="submit">保存整体参数</button>
+        <button type="submit">${translate('forms.saveSettings')}</button>
       </div>
     </form>
   `;
 }
 
-function renderComparisonForm() {
+function renderComparisonForm(translate) {
   return `
     <form class="grid-form compact" id="comparison-form">
       <div class="field span-3">
-        <label for="compare-platforms">平台筛选</label>
+        <label for="compare-platforms">${translate('forms.filterPlatforms')}</label>
         <select id="compare-platforms" name="platformIds" multiple size="5">
           ${state.platforms.map((platform) => `<option value="${platform.id}">${platform.name}</option>`).join('')}
         </select>
       </div>
       <div class="field span-3">
-        <label for="compare-models">模型筛选</label>
+        <label for="compare-models">${translate('forms.filterModels')}</label>
         <select id="compare-models" name="modelIds" multiple size="5">
           ${state.models.map((model) => `<option value="${model.id}">${model.name}</option>`).join('')}
         </select>
       </div>
       <div class="field">
-        <label for="compare-input">本次文本输入</label>
+        <label for="compare-input">${translate('forms.runtimeTextInput')}</label>
         <input id="compare-input" name="textInputTokens" type="number" step="1" value="${state.scenarioDefaults.textInputTokens}">
       </div>
       <div class="field">
-        <label for="compare-output">本次文本输出</label>
+        <label for="compare-output">${translate('forms.runtimeTextOutput')}</label>
         <input id="compare-output" name="textOutputTokens" type="number" step="1" value="${state.scenarioDefaults.textOutputTokens}">
       </div>
       <div class="field">
-        <label for="compare-images">本次图片张数</label>
+        <label for="compare-images">${translate('forms.runtimeImageCount')}</label>
         <input id="compare-images" name="imageCount" type="number" step="1" value="${state.scenarioDefaults.imageCount}">
       </div>
       <div class="field">
-        <label for="compare-video">本次视频秒数</label>
+        <label for="compare-video">${translate('forms.runtimeVideoSeconds')}</label>
         <input id="compare-video" name="videoSeconds" type="number" step="1" value="${state.scenarioDefaults.videoSeconds}">
       </div>
       <div class="field">
-        <label for="compare-audio">本次音频分钟</label>
+        <label for="compare-audio">${translate('forms.runtimeAudioMinutes')}</label>
         <input id="compare-audio" name="audioMinutes" type="number" step="1" value="${state.scenarioDefaults.audioMinutes}">
       </div>
       <div class="field">
-        <label>结果币种</label>
+        <label>${translate('forms.resultCurrency')}</label>
         <div class="pill-readout">${escapeHtml(state.preferences?.targetCurrency ?? 'CNY')}</div>
       </div>
       <div class="field span-3">
-        <button type="submit">生成对比表</button>
+        <button type="submit">${translate('forms.generate')}</button>
       </div>
     </form>
   `;
 }
 
-function renderResultsTable() {
+function renderCalculationSections(locale) {
+  const sections = buildCalculationSections(locale);
+
+  return `
+    <section class="calculation-stack">
+      ${sections.map((section) => `
+        <article class="formula-card">
+          <h3>${escapeHtml(section.title)}</h3>
+          <p>${escapeHtml(section.summary)}</p>
+          <pre class="formula-block">${escapeHtml(section.formula)}</pre>
+          <p class="formula-example">${escapeHtml(section.example)}</p>
+        </article>
+      `).join('')}
+    </section>
+  `;
+}
+
+function renderResultsTable(translate) {
   if (comparisonRows.length === 0) {
-    return `<div class="empty">还没有结果。先录入网站、套餐、模型和规则，再在第二列生成对比表。</div>`;
+    return `<div class="empty">${translate('results.empty')}</div>`;
   }
 
   return `
     <table>
       <thead>
         <tr>
-          <th>Platform</th>
-          <th>Model</th>
-          <th>Category</th>
-          <th>Pricing Mode</th>
-          <th>Plan Name</th>
-          <th>Plan Total Price</th>
-          <th>Total Credits</th>
-          <th>Unit Usage Description</th>
-          <th>Original Currency Unit Cost</th>
-          <th>Exchange Rate</th>
-          <th>Converted Unit Cost</th>
-          <th>Typical Single-Run Cost</th>
+          <th>${translate('resultsTable.platform')}</th>
+          <th>${translate('resultsTable.model')}</th>
+          <th>${translate('resultsTable.category')}</th>
+          <th>${translate('resultsTable.pricingMode')}</th>
+          <th>${translate('resultsTable.planName')}</th>
+          <th>${translate('resultsTable.planTotalPrice')}</th>
+          <th>${translate('resultsTable.totalCredits')}</th>
+          <th>${translate('resultsTable.unitUsageDescription')}</th>
+          <th>${translate('resultsTable.originalUnitCost')}</th>
+          <th>${translate('resultsTable.exchangeRate')}</th>
+          <th>${translate('resultsTable.convertedUnitCost')}</th>
+          <th>${translate('resultsTable.singleRunCost')}</th>
         </tr>
       </thead>
       <tbody>
@@ -523,7 +557,7 @@ function renderResultsTable() {
   `;
 }
 
-function renderCards(title, items, renderer) {
+function renderCards(title, items, renderer, translate) {
   return `
     <section>
       <div class="section-title">
@@ -532,7 +566,7 @@ function renderCards(title, items, renderer) {
       <div class="card-list">
         ${
           items.length === 0
-            ? '<div class="card"><span class="meta">暂无数据</span></div>'
+            ? `<div class="card"><span class="meta">${translate('cards.empty')}</span></div>`
             : items.map(renderer).join('')
         }
       </div>
@@ -540,24 +574,24 @@ function renderCards(title, items, renderer) {
   `;
 }
 
-function renderPlatformCard(platform) {
+function renderPlatformCard(platform, translate) {
   return `
     <article class="card">
       <strong>${escapeHtml(platform.name)}</strong>
-      <span class="meta">${escapeHtml(platform.defaultCurrency)} · ${escapeHtml(platform.notes || '无备注')}</span>
+      <span class="meta">${escapeHtml(platform.defaultCurrency)} · ${escapeHtml(platform.notes || translate('cards.noNotes'))}</span>
     </article>
   `;
 }
 
-function renderPlanCard(plan) {
+function renderPlanCard(plan, translate) {
   const platform = state.platforms.find((item) => item.id === plan.platformId);
   return `
     <article class="card">
       <strong>${escapeHtml(plan.name)}</strong>
       <span class="meta">${plan.price} ${escapeHtml(plan.currency)} · ${escapeHtml(plan.billingCycle || 'custom')}</span>
       <div class="chips">
-        <span class="chip">${escapeHtml(platform?.name || '未知平台')}</span>
-        <span class="chip">积分 ${plan.creditAmount || '-'}</span>
+        <span class="chip">${escapeHtml(platform?.name || translate('cards.unknownPlatform'))}</span>
+        <span class="chip">${translate('cards.credits')} ${plan.creditAmount || '-'}</span>
       </div>
     </article>
   `;
@@ -572,13 +606,13 @@ function renderModelCard(model) {
   `;
 }
 
-function renderRuleCard(rule) {
+function renderRuleCard(rule, translate) {
   const platform = state.platforms.find((item) => item.id === rule.platformId);
   const model = state.models.find((item) => item.id === rule.modelId);
   return `
     <article class="card">
-      <strong>${escapeHtml(model?.name || '未知模型')}</strong>
-      <span class="meta">${escapeHtml(platform?.name || '未知平台')} · ${escapeHtml(rule.pricingMode)}</span>
+      <strong>${escapeHtml(model?.name || translate('cards.unknownModel'))}</strong>
+      <span class="meta">${escapeHtml(platform?.name || translate('cards.unknownPlatform'))} · ${escapeHtml(rule.pricingMode)}</span>
       <div class="chips">
         ${rule.unitDefinitions.map((unit) => `<span class="chip">${escapeHtml(unit.unitType)}: ${unit.value}</span>`).join('')}
       </div>
@@ -619,7 +653,7 @@ async function handlePlatformSubmit(event) {
 
   await updateState((draft) => {
     draft.platforms.push(platform);
-  }, '网站已保存');
+  }, t('flash.platformSaved'));
 }
 
 async function handlePlanSubmit(event) {
@@ -638,7 +672,7 @@ async function handlePlanSubmit(event) {
 
   await updateState((draft) => {
     draft.plans.push(plan);
-  }, '套餐已保存');
+  }, t('flash.planSaved'));
 }
 
 async function handleModelSubmit(event) {
@@ -652,7 +686,7 @@ async function handleModelSubmit(event) {
 
   await updateState((draft) => {
     draft.models.push(model);
-  }, '模型已保存');
+  }, t('flash.modelSaved'));
 }
 
 async function handleRuleSubmit(event) {
@@ -662,7 +696,7 @@ async function handleRuleSubmit(event) {
   const model = state.models.find((item) => item.id === modelId);
 
   if (!model) {
-    setFlash('error', '请先选择一个有效模型。');
+    setFlash('error', t('flash.invalidModel'));
     render();
     return;
   }
@@ -673,7 +707,7 @@ async function handleRuleSubmit(event) {
   });
 
   if (unitDefinitions.length === 0) {
-    setFlash('error', '当前规则没有任何有效的单位价格或积分消耗。');
+    setFlash('error', t('flash.invalidUnits'));
     render();
     return;
   }
@@ -691,7 +725,7 @@ async function handleRuleSubmit(event) {
 
   await updateState((draft) => {
     draft.rules.push(rule);
-  }, '规则已保存');
+  }, t('flash.ruleSaved'));
 }
 
 async function handleSettingsSubmit(event) {
@@ -717,9 +751,10 @@ async function handleSettingsSubmit(event) {
     };
     draft.preferences = {
       ...(draft.preferences ?? {}),
+      locale: draft.preferences?.locale ?? 'zh-CN',
       targetCurrency: String(formData.get('targetCurrency')).trim().toUpperCase() || 'CNY',
     };
-  }, '整体参数已保存');
+  }, t('flash.settingsSaved'));
 }
 
 function handleComparisonSubmit(event) {
@@ -742,9 +777,9 @@ function handleComparisonSubmit(event) {
 
   try {
     comparisonRows = buildComparisonRows({ state, filters });
-    setFlash('success', `已生成 ${comparisonRows.length} 条结果。`);
+    setFlash('success', `${t('flash.generatedPrefix')} ${comparisonRows.length} ${t('flash.generatedSuffix')}`);
   } catch (error) {
-    setFlash('error', error instanceof Error ? error.message : '生成结果失败。');
+    setFlash('error', error instanceof Error ? error.message : t('flash.generateFailed'));
   }
 
   render();
@@ -759,7 +794,7 @@ function handleExport() {
   link.download = 'ai-saas-price-compare.json';
   link.click();
   URL.revokeObjectURL(link.href);
-  setFlash('success', 'JSON 已导出。');
+  setFlash('success', t('flash.exportDone'));
   render();
 }
 
@@ -777,10 +812,10 @@ async function handleImport(event) {
     });
     state = await repository.loadState();
     comparisonRows = [];
-    setFlash('success', 'JSON 已导入。');
+    setFlash('success', t('flash.importDone'));
     render();
   } catch (error) {
-    setFlash('error', error instanceof Error ? error.message : 'JSON 导入失败。');
+    setFlash('error', error instanceof Error ? error.message : t('flash.importFailed'));
     render();
   }
 }
@@ -794,13 +829,13 @@ async function handleLoadDemo() {
     rules: [{ id: 'rule-demo', platformId: 'platform-demo', modelId: 'model-demo', pricingMode: 'plan_credit_based', planId: 'plan-demo', currency: 'CNY', unitDefinitions: [{ unitType: 'per_image', value: 20 }], notes: '' }],
     exchangeRates: structuredClone(DEFAULT_EXCHANGE_RATES),
     scenarioDefaults: structuredClone(DEFAULT_SCENARIO),
-    preferences: { targetCurrency: 'CNY' },
+    preferences: { locale: 'zh-CN', targetCurrency: 'CNY' },
   });
   state = await repository.loadState();
   comparisonRows = [];
   tabState.entry = 'platforms';
   tabState.controls = 'comparison';
-  setFlash('success', '已载入演示数据，现在直接点“生成对比表”就能看到 1.95 CNY。');
+  setFlash('success', t('flash.demoLoaded'));
   render();
 }
 

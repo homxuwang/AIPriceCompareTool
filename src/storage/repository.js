@@ -14,6 +14,7 @@ export function createEmptyState() {
     exchangeRates: structuredClone(DEFAULT_EXCHANGE_RATES),
     scenarioDefaults: structuredClone(DEFAULT_SCENARIO),
     preferences: {
+      locale: 'zh-CN',
       targetCurrency: 'CNY',
     },
   };
