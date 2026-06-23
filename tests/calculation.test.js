@@ -41,6 +41,31 @@ test('builds image comparison row from plan-credit pricing', () => {
   assert.equal(row.totalCredits, 400);
 });
 
+test('exposes credit conversion details for plan-credit pricing', () => {
+  const row = buildComparisonRow({
+    platform: { name: 'Foo AI' },
+    model: { name: 'gpt-image-1', category: 'image' },
+    plan: { name: 'Pro', price: 39, currency: 'CNY', creditAmount: 400 },
+    rule: {
+      pricingMode: 'plan_credit_based',
+      unitDefinitions: [{ unitType: 'per_image', value: 20 }],
+    },
+    scenario: {
+      imageCount: 1,
+      textInputTokens: 1000,
+      textOutputTokens: 500,
+      videoSeconds: 5,
+      audioMinutes: 1,
+    },
+    exchangeRates: { baseCurrency: 'CNY', rates: { CNY: 1 } },
+    targetCurrency: 'CNY',
+  });
+
+  assert.equal(row.comparisonType, 'image');
+  assert.equal(row.creditUnitCost, 0.0975);
+  assert.equal(row.primaryUsageAmount, 20);
+});
+
 test('builds text comparison row from direct pricing', () => {
   const row = buildComparisonRow({
     platform: { name: 'Bar AI' },

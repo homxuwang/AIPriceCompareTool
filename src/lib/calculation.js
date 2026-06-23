@@ -19,13 +19,16 @@ export function buildComparisonRow({
 }) {
   const unitCosts = rule.unitDefinitions.map((unitDefinition) => {
     const sourceCurrency = plan?.currency ?? rule.currency ?? targetCurrency;
-    const originalUnitCost =
+    const creditUnitCost =
       rule.pricingMode === 'plan_credit_based'
-        ? calculateUnitCostFromPlanCredits({
+        ? calculateCreditUnitCost({
             planPrice: plan.price,
             creditAmount: plan.creditAmount,
-            creditsPerUnit: unitDefinition.value,
           })
+        : null;
+    const originalUnitCost =
+      rule.pricingMode === 'plan_credit_based'
+        ? roundCurrency(creditUnitCost * unitDefinition.value)
         : roundCurrency(unitDefinition.value);
 
     const convertedUnitCost = roundCurrency(
@@ -39,6 +42,8 @@ export function buildComparisonRow({
 
     return {
       unitType: unitDefinition.unitType,
+      usageAmount: unitDefinition.value,
+      creditUnitCost,
       originalUnitCost,
       convertedUnitCost,
       sourceCurrency,
@@ -55,6 +60,7 @@ export function buildComparisonRow({
     platformName: platform.name,
     modelName: model.name,
     category: model.category,
+    comparisonType: model.category,
     pricingMode: rule.pricingMode,
     planName: plan?.name ?? '',
     planTotalPrice: plan?.price ?? null,
@@ -65,12 +71,18 @@ export function buildComparisonRow({
     unitUsageDescription: rule.unitDefinitions
       .map((unitDefinition) => `${unitDefinition.unitType}: ${unitDefinition.value}`)
       .join(', '),
+    primaryUsageAmount: unitCosts[0]?.usageAmount ?? 0,
+    creditUnitCost: unitCosts[0]?.creditUnitCost ?? null,
     convertedUnitCost: unitCosts[0]?.convertedUnitCost ?? 0,
     originalUnitCost: unitCosts[0]?.originalUnitCost ?? 0,
     originalCurrency: unitCosts[0]?.sourceCurrency ?? targetCurrency,
     singleRunCost,
     unitCosts,
   };
+}
+
+function calculateCreditUnitCost({ planPrice, creditAmount }) {
+  return roundCurrency(planPrice / creditAmount);
 }
 
 function getScenarioMultiplier(unitType, category, scenario) {

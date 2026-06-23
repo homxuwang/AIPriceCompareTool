@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildComparisonRows,
   buildUnitDefinitions,
+  getVisibleConsumptionFieldNames,
 } from '../src/options/helpers.js';
 
 test('builds image unit definitions from form values', () => {
@@ -14,6 +15,21 @@ test('builds image unit definitions from form values', () => {
   });
 
   assert.deepEqual(unitDefinitions, [{ unitType: 'per_image', value: 20 }]);
+});
+
+test('builds image unit definitions from guided credit consumption fields', () => {
+  const unitDefinitions = buildUnitDefinitions({
+    category: 'image',
+    values: {
+      imageCreditsPerUnit: '20',
+    },
+  });
+
+  assert.deepEqual(unitDefinitions, [{ unitType: 'per_image', value: 20 }]);
+});
+
+test('shows only image consumption fields for image models', () => {
+  assert.deepEqual(getVisibleConsumptionFieldNames('image'), ['imageCreditsPerUnit']);
 });
 
 test('builds partial text unit definitions from form values', () => {
