@@ -10,6 +10,7 @@ import {
 import {
   buildComparisonRows,
   buildUnitDefinitions,
+  getVisibleConsumptionFieldNames,
 } from './helpers.js';
 import {
   buildCalculationSections,
@@ -326,6 +327,13 @@ function renderRuleForm(translate) {
         <p>${translate('forms.ruleHint')}</p>
       </div>
       <form class="grid-form compact" id="rule-form">
+        <div class="form-step span-3">
+          <span>1</span>
+          <div>
+            <strong>选择网站、套餐和模型</strong>
+            <p>先定位价格来自哪里，再填写该模型实际消耗。</p>
+          </div>
+        </div>
         <div class="field">
           <label for="rule-platform-id">${translate('forms.platform')}</label>
           <select id="rule-platform-id" name="platformId" required>
@@ -343,15 +351,18 @@ function renderRuleForm(translate) {
         <div class="field">
           <label for="rule-mode">${translate('forms.pricingMode')}</label>
           <select id="rule-mode" name="pricingMode" required>
-            <option value="plan_credit_based">plan_credit_based</option>
-            <option value="direct_price_based">direct_price_based</option>
+            <option value="plan_credit_based">${translate('forms.creditMode')}</option>
+            <option value="direct_price_based">${translate('forms.directMode')}</option>
           </select>
         </div>
         <div class="field">
           <label for="rule-plan-id">${translate('forms.linkedPlan')}</label>
           <select id="rule-plan-id" name="planId">
             <option value="">可留空</option>
-            ${state.plans.map((plan) => `<option value="${plan.id}">${plan.name}</option>`).join('')}
+            ${state.plans.map((plan) => {
+              const platform = state.platforms.find((item) => item.id === plan.platformId);
+              return `<option value="${plan.id}">${escapeHtml(platform?.name ?? '')} · ${escapeHtml(plan.name)} · ${plan.price} ${escapeHtml(plan.currency)} / ${plan.creditAmount ?? '-'} 积分</option>`;
+            }).join('')}
           </select>
         </div>
         <div class="field">
@@ -362,33 +373,45 @@ function renderRuleForm(translate) {
           <label for="rule-notes">${translate('forms.notes')}</label>
           <input id="rule-notes" name="notes">
         </div>
-        <div class="field">
+        <div class="form-step span-3">
+          <span>2</span>
+          <div>
+            <strong>${translate('forms.consumptionTitle')}</strong>
+            <p>积分换算时填“消耗多少积分”；直接价格时填“每单位多少钱”。只填当前模型类型需要的项目。</p>
+          </div>
+        </div>
+        <div class="field consumption-field" data-consumption-field="textInputCreditsPer1k">
           <label for="text-input-value">${translate('forms.textInputPer1k')}</label>
-          <input id="text-input-value" name="textInputValue" type="number" step="0.000001">
+          <input id="text-input-value" name="textInputCreditsPer1k" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
         </div>
-        <div class="field">
+        <div class="field consumption-field" data-consumption-field="textOutputCreditsPer1k">
           <label for="text-output-value">${translate('forms.textOutputPer1k')}</label>
-          <input id="text-output-value" name="textOutputValue" type="number" step="0.000001">
+          <input id="text-output-value" name="textOutputCreditsPer1k" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
         </div>
-        <div class="field">
+        <div class="field consumption-field" data-consumption-field="imageCreditsPerUnit">
           <label for="image-value">${translate('forms.imagePerUnit')}</label>
-          <input id="image-value" name="imageValue" type="number" step="0.000001">
+          <input id="image-value" name="imageCreditsPerUnit" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
         </div>
-        <div class="field">
+        <div class="field consumption-field" data-consumption-field="videoCreditsPerSecond">
           <label for="video-second-value">${translate('forms.videoPerSecond')}</label>
-          <input id="video-second-value" name="videoSecondValue" type="number" step="0.000001">
+          <input id="video-second-value" name="videoCreditsPerSecond" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
         </div>
-        <div class="field">
+        <div class="field consumption-field" data-consumption-field="videoCreditsPerMinute">
           <label for="video-minute-value">${translate('forms.videoPerMinute')}</label>
-          <input id="video-minute-value" name="videoMinuteValue" type="number" step="0.000001">
+          <input id="video-minute-value" name="videoCreditsPerMinute" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
         </div>
-        <div class="field">
+        <div class="field consumption-field" data-consumption-field="audioCreditsPerSecond">
           <label for="audio-second-value">${translate('forms.audioPerSecond')}</label>
-          <input id="audio-second-value" name="audioSecondValue" type="number" step="0.000001">
+          <input id="audio-second-value" name="audioCreditsPerSecond" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
         </div>
-        <div class="field">
+        <div class="field consumption-field" data-consumption-field="audioCreditsPerMinute">
           <label for="audio-minute-value">${translate('forms.audioPerMinute')}</label>
-          <input id="audio-minute-value" name="audioMinuteValue" type="number" step="0.000001">
+          <input id="audio-minute-value" name="audioCreditsPerMinute" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
+        </div>
+        <div class="conversion-preview span-3" id="rule-preview">
+          <strong>${translate('forms.conversionPreview')}</strong>
+          <p>${translate('forms.previewPlan')}</p>
+          <p>${translate('forms.previewUsage')}</p>
         </div>
         <div class="field span-3">
           <button type="submit">${translate('forms.saveRule')}</button>
@@ -518,19 +541,16 @@ function renderResultsTable(translate) {
   }
 
   return `
-    <table>
+    <table class="comparison-table">
       <thead>
         <tr>
           <th>${translate('resultsTable.platform')}</th>
+          <th>${translate('resultsTable.comparisonType')}</th>
           <th>${translate('resultsTable.model')}</th>
-          <th>${translate('resultsTable.category')}</th>
           <th>${translate('resultsTable.pricingMode')}</th>
           <th>${translate('resultsTable.planName')}</th>
-          <th>${translate('resultsTable.planTotalPrice')}</th>
-          <th>${translate('resultsTable.totalCredits')}</th>
-          <th>${translate('resultsTable.unitUsageDescription')}</th>
+          <th>${translate('resultsTable.usageAmount')}</th>
           <th>${translate('resultsTable.originalUnitCost')}</th>
-          <th>${translate('resultsTable.exchangeRate')}</th>
           <th>${translate('resultsTable.convertedUnitCost')}</th>
           <th>${translate('resultsTable.singleRunCost')}</th>
         </tr>
@@ -539,17 +559,14 @@ function renderResultsTable(translate) {
         ${comparisonRows.map((row) => `
           <tr>
             <td>${escapeHtml(row.platformName)}</td>
+            <td><span class="type-pill">${escapeHtml(getCategoryLabel(row.comparisonType))}</span></td>
             <td>${escapeHtml(row.modelName)}</td>
-            <td>${escapeHtml(row.category)}</td>
-            <td>${escapeHtml(row.pricingMode)}</td>
+            <td>${escapeHtml(getPricingModeLabel(row.pricingMode))}</td>
             <td>${escapeHtml(row.planName || '-')}</td>
-            <td>${row.planTotalPrice ?? '-'}</td>
-            <td>${row.totalCredits ?? '-'}</td>
-            <td>${escapeHtml(row.unitUsageDescription)}</td>
+            <td>${formatUsageAmount(row)}</td>
             <td>${row.originalUnitCost} ${escapeHtml(row.originalCurrency)}</td>
-            <td>${row.exchangeRate}</td>
-            <td>${row.convertedUnitCost}</td>
-            <td>${row.singleRunCost}</td>
+            <td>${row.convertedUnitCost} ${escapeHtml(state.preferences?.targetCurrency ?? 'CNY')}</td>
+            <td><strong>${row.singleRunCost} ${escapeHtml(state.preferences?.targetCurrency ?? 'CNY')}</strong></td>
           </tr>
         `).join('')}
       </tbody>
@@ -612,9 +629,10 @@ function renderRuleCard(rule, translate) {
   return `
     <article class="card">
       <strong>${escapeHtml(model?.name || translate('cards.unknownModel'))}</strong>
-      <span class="meta">${escapeHtml(platform?.name || translate('cards.unknownPlatform'))} · ${escapeHtml(rule.pricingMode)}</span>
+      <span class="meta">${escapeHtml(platform?.name || translate('cards.unknownPlatform'))} · ${escapeHtml(getPricingModeLabel(rule.pricingMode))}</span>
       <div class="chips">
-        ${rule.unitDefinitions.map((unit) => `<span class="chip">${escapeHtml(unit.unitType)}: ${unit.value}</span>`).join('')}
+        <span class="chip">${escapeHtml(getCategoryLabel(model?.category))}</span>
+        ${rule.unitDefinitions.map((unit) => `<span class="chip">${escapeHtml(getUnitTypeLabel(unit.unitType))}: ${unit.value}</span>`).join('')}
       </div>
     </article>
   `;
@@ -627,18 +645,25 @@ function bindEvents() {
   document.querySelector('#rule-form')?.addEventListener('submit', handleRuleSubmit);
   document.querySelector('#settings-form')?.addEventListener('submit', handleSettingsSubmit);
   document.querySelector('#comparison-form')?.addEventListener('submit', handleComparisonSubmit);
+  document.querySelector('#rule-form')?.addEventListener('input', handleRulePreviewChange);
+  document.querySelector('#rule-form')?.addEventListener('change', handleRulePreviewChange);
   document.querySelector('#export-json')?.addEventListener('click', handleExport);
   document.querySelector('#import-json')?.addEventListener('change', handleImport);
   document.querySelector('#reset-demo')?.addEventListener('click', handleLoadDemo);
   document.querySelectorAll('[data-tab-group]').forEach((button) => {
     button.addEventListener('click', handleTabClick);
   });
+  updateRulePreview();
 }
 
 function handleTabClick(event) {
   const button = event.currentTarget;
   tabState[button.dataset.tabGroup] = button.dataset.tabValue;
   render();
+}
+
+function handleRulePreviewChange() {
+  updateRulePreview();
 }
 
 async function handlePlatformSubmit(event) {
@@ -856,6 +881,140 @@ function createId(prefix) {
 
 function getSelectedValues(select) {
   return Array.from(select?.selectedOptions ?? []).map((option) => option.value);
+}
+
+function updateRulePreview() {
+  const form = document.querySelector('#rule-form');
+  const preview = document.querySelector('#rule-preview');
+  if (!form || !preview) {
+    return;
+  }
+
+  const formData = new FormData(form);
+  const pricingMode = String(formData.get('pricingMode'));
+  const plan = state.plans.find((item) => item.id === String(formData.get('planId')));
+  const model = state.models.find((item) => item.id === String(formData.get('modelId')));
+  updateConsumptionFieldVisibility(model?.category);
+  const usage = getPrimaryUsageFromForm(formData, model?.category);
+  const targetCurrency = state.preferences?.targetCurrency ?? 'CNY';
+
+  if (pricingMode === 'plan_credit_based') {
+    if (!plan?.price || !plan?.creditAmount) {
+      preview.innerHTML = `
+        <strong>${t('forms.conversionPreview')}</strong>
+        <p>请选择包含价格和积分数量的积分包。</p>
+      `;
+      return;
+    }
+
+    const creditUnitCost = roundDisplay(plan.price / plan.creditAmount);
+    const unitCost = usage ? roundDisplay(creditUnitCost * usage.value) : null;
+    preview.innerHTML = `
+      <strong>${t('forms.conversionPreview')}</strong>
+      <div class="preview-grid">
+        <span>每 1 积分</span>
+        <b>${creditUnitCost} ${escapeHtml(plan.currency)}</b>
+        <span>${usage ? `${escapeHtml(usage.label)}消耗` : '等待填写消耗'}</span>
+        <b>${usage ? `${usage.value} 积分` : '-'}</b>
+        <span>折算单位成本</span>
+        <b>${unitCost == null ? '-' : `${unitCost} ${escapeHtml(plan.currency)}`}</b>
+      </div>
+    `;
+    return;
+  }
+
+  preview.innerHTML = `
+    <strong>${t('forms.conversionPreview')}</strong>
+    <div class="preview-grid">
+      <span>直接单价</span>
+      <b>${usage ? `${usage.value} ${escapeHtml(String(formData.get('currency') || 'USD'))}` : '-'}</b>
+      <span>目标币种</span>
+      <b>${escapeHtml(targetCurrency)}</b>
+    </div>
+  `;
+}
+
+function updateConsumptionFieldVisibility(category) {
+  const visibleFields = new Set(getVisibleConsumptionFieldNames(category));
+  document.querySelectorAll('[data-consumption-field]').forEach((field) => {
+    const shouldShow = visibleFields.has(field.dataset.consumptionField);
+    field.hidden = !shouldShow;
+    field.querySelectorAll('input').forEach((input) => {
+      input.disabled = !shouldShow;
+      if (!shouldShow) {
+        input.value = '';
+      }
+    });
+  });
+}
+
+function getPrimaryUsageFromForm(formData, category) {
+  const usageFields = {
+    text: [
+      ['textInputCreditsPer1k', '每 1K 输入'],
+      ['textOutputCreditsPer1k', '每 1K 输出'],
+    ],
+    image: [['imageCreditsPerUnit', '每张图片']],
+    video: [
+      ['videoCreditsPerSecond', '每秒视频'],
+      ['videoCreditsPerMinute', '每分钟视频'],
+    ],
+    audio: [
+      ['audioCreditsPerSecond', '每秒音频'],
+      ['audioCreditsPerMinute', '每分钟音频'],
+    ],
+  };
+
+  for (const [fieldName, label] of usageFields[category] ?? []) {
+    const rawValue = formData.get(fieldName);
+    if (rawValue !== '' && rawValue != null && !Number.isNaN(Number(rawValue))) {
+      return { label, value: Number(rawValue) };
+    }
+  }
+
+  return null;
+}
+
+function formatUsageAmount(row) {
+  const suffix = row.pricingMode === 'plan_credit_based' ? '积分' : escapeHtml(row.originalCurrency);
+  const usageText = row.unitCosts
+    .map((unitCost) => `${escapeHtml(getUnitTypeLabel(unitCost.unitType))} ${unitCost.usageAmount} ${suffix}`)
+    .join(' + ');
+
+  return usageText || '-';
+}
+
+function getCategoryLabel(category) {
+  const labels = {
+    text: '文本',
+    image: '图片',
+    video: '视频',
+    audio: '音频',
+  };
+  return labels[category] ?? category ?? '-';
+}
+
+function getPricingModeLabel(pricingMode) {
+  const labels = {
+    plan_credit_based: '积分换算',
+    direct_price_based: '直接价格',
+  };
+  return labels[pricingMode] ?? pricingMode;
+}
+
+function getUnitTypeLabel(unitType) {
+  const labels = {
+    per_1k_input_tokens: '每 1K 输入',
+    per_1k_output_tokens: '每 1K 输出',
+    per_image: '每张图片',
+    per_second: '每秒',
+    per_minute: '每分钟',
+  };
+  return labels[unitType] ?? unitType;
+}
+
+function roundDisplay(value) {
+  return Number(value.toFixed(6));
 }
 
 function setFlash(type, message) {

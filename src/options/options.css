@@ -139,11 +139,19 @@ body {
   gap: 6px;
 }
 
+.field[hidden] {
+  display: none;
+}
+
 .field.span-2 {
   grid-column: span 2;
 }
 
 .field.span-3 {
+  grid-column: span 3;
+}
+
+.grid-form > .span-3 {
   grid-column: span 3;
 }
 
@@ -302,6 +310,86 @@ button:hover,
   font-size: 12px;
 }
 
+.form-step {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid #e5d4b6;
+  border-radius: 14px;
+  background: #fff8ed;
+}
+
+.form-step span {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.form-step strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.form-step p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.conversion-preview {
+  padding: 16px;
+  border: 1px solid #d4b98a;
+  border-radius: 16px;
+  background: #fffdf7;
+}
+
+.conversion-preview strong {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.conversion-preview p {
+  margin: 6px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 14px;
+  align-items: center;
+}
+
+.preview-grid span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.preview-grid b {
+  text-align: right;
+}
+
+.type-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e8f1ea;
+  color: #265f42;
+  font-weight: 700;
+}
+
 .table-wrap {
   overflow: auto;
   border-top: 1px solid var(--line);
@@ -312,6 +400,10 @@ table {
   width: 100%;
   border-collapse: collapse;
   min-width: 1024px;
+}
+
+.comparison-table {
+  min-width: 880px;
 }
 
 th,
@@ -464,7 +556,16 @@ th {
   }
 
   .field.span-2,
-  .field.span-3 {
+  .field.span-3,
+  .grid-form > .span-3 {
     grid-column: span 1;
+  }
+
+  .preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-grid b {
+    text-align: left;
   }
 }

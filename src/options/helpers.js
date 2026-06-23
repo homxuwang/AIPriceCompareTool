@@ -1,27 +1,38 @@
 import { buildComparisonRow } from '../lib/calculation.js';
 
+const consumptionFieldsByCategory = {
+  text: ['textInputCreditsPer1k', 'textOutputCreditsPer1k'],
+  image: ['imageCreditsPerUnit'],
+  video: ['videoCreditsPerSecond', 'videoCreditsPerMinute'],
+  audio: ['audioCreditsPerSecond', 'audioCreditsPerMinute'],
+};
+
 export function buildUnitDefinitions({ category, values }) {
   switch (category) {
     case 'text':
       return compactUnitDefinitions([
-        ['per_1k_input_tokens', values.textInputValue],
-        ['per_1k_output_tokens', values.textOutputValue],
+        ['per_1k_input_tokens', values.textInputCreditsPer1k ?? values.textInputValue],
+        ['per_1k_output_tokens', values.textOutputCreditsPer1k ?? values.textOutputValue],
       ]);
     case 'image':
-      return compactUnitDefinitions([['per_image', values.imageValue]]);
+      return compactUnitDefinitions([['per_image', values.imageCreditsPerUnit ?? values.imageValue]]);
     case 'video':
       return compactUnitDefinitions([
-        ['per_second', values.videoSecondValue],
-        ['per_minute', values.videoMinuteValue],
+        ['per_second', values.videoCreditsPerSecond ?? values.videoSecondValue],
+        ['per_minute', values.videoCreditsPerMinute ?? values.videoMinuteValue],
       ]);
     case 'audio':
       return compactUnitDefinitions([
-        ['per_second', values.audioSecondValue],
-        ['per_minute', values.audioMinuteValue],
+        ['per_second', values.audioCreditsPerSecond ?? values.audioSecondValue],
+        ['per_minute', values.audioCreditsPerMinute ?? values.audioMinuteValue],
       ]);
     default:
       return [];
   }
+}
+
+export function getVisibleConsumptionFieldNames(category) {
+  return consumptionFieldsByCategory[category] ?? [];
 }
 
 export function buildComparisonRows({ state, filters }) {
