@@ -19,26 +19,37 @@ export function buildComparisonRow({
 }) {
   const unitCosts = rule.unitDefinitions.map((unitDefinition) => {
     const sourceCurrency = plan?.currency ?? rule.currency ?? targetCurrency;
-    const creditUnitCost =
-      rule.pricingMode === 'plan_credit_based'
-        ? calculateCreditUnitCost({
-            planPrice: plan.price,
-            creditAmount: plan.creditAmount,
-          })
-        : null;
-    const originalUnitCost =
-      rule.pricingMode === 'plan_credit_based'
-        ? roundCurrency(creditUnitCost * unitDefinition.value)
-        : roundCurrency(unitDefinition.value);
+    
+    let creditUnitCost = null;
+    if (rule.pricingMode === 'plan_credit_based') {
+      if (plan && plan.price && plan.creditAmount) {
+        creditUnitCost = plan.price / plan.creditAmount;
+      } else {
+        creditUnitCost = null;
+      }
+    }
+    
+    let originalUnitCost = null;
+    if (rule.pricingMode === 'plan_credit_based') {
+      if (creditUnitCost !== null && unitDefinition.value != null) {
+        originalUnitCost = creditUnitCost * unitDefinition.value;
+      } else {
+        originalUnitCost = null;
+      }
+    } else {
+      originalUnitCost = unitDefinition.value != null ? Number(unitDefinition.value) : null;
+    }
 
-    const convertedUnitCost = roundCurrency(
-      convertCurrency({
-        amount: originalUnitCost,
-        fromCurrency: sourceCurrency,
-        toCurrency: targetCurrency,
-        rates: exchangeRates.rates,
-      }),
-    );
+    const convertedUnitCost = originalUnitCost !== null
+      ? roundCurrency(
+          convertCurrency({
+            amount: originalUnitCost,
+            fromCurrency: sourceCurrency,
+            toCurrency: targetCurrency,
+            rates: exchangeRates.rates,
+          }),
+        )
+      : null;
 
     return {
       unitType: unitDefinition.unitType,
@@ -50,11 +61,15 @@ export function buildComparisonRow({
     };
   });
 
-  const singleRunCost = roundCurrency(
-    unitCosts.reduce((total, unitCost) => {
-      return total + unitCost.convertedUnitCost * getScenarioMultiplier(unitCost.unitType, model.category, scenario);
-    }, 0),
-  );
+  const hasValidCosts = unitCosts.some((uc) => uc.convertedUnitCost !== null);
+  const singleRunCost = hasValidCosts
+    ? roundCurrency(
+        unitCosts.reduce((total, unitCost) => {
+          const cost = unitCost.convertedUnitCost ?? 0;
+          return total + cost * getScenarioMultiplier(unitCost.unitType, model.category, scenario);
+        }, 0),
+      )
+    : null;
 
   return {
     platformName: platform.name,
@@ -73,8 +88,8 @@ export function buildComparisonRow({
       .join(', '),
     primaryUsageAmount: unitCosts[0]?.usageAmount ?? 0,
     creditUnitCost: unitCosts[0]?.creditUnitCost ?? null,
-    convertedUnitCost: unitCosts[0]?.convertedUnitCost ?? 0,
-    originalUnitCost: unitCosts[0]?.originalUnitCost ?? 0,
+    convertedUnitCost: unitCosts[0]?.convertedUnitCost ?? null,
+    originalUnitCost: unitCosts[0]?.originalUnitCost ?? null,
     originalCurrency: unitCosts[0]?.sourceCurrency ?? targetCurrency,
     singleRunCost,
     unitCosts,
@@ -94,7 +109,7 @@ function getScenarioMultiplier(unitType, category, scenario) {
     case 'per_image':
       return scenario.imageCount;
     case 'per_second':
-      return category === 'audio' ? scenario.audioMinutes * 60 : scenario.videoSeconds;
+      return category === 'audio' ? (scenario.audioMinutes || 0) * 60 : scenario.videoSeconds;
     case 'per_minute':
       return category === 'video' ? scenario.videoSeconds / 60 : scenario.audioMinutes;
     default:

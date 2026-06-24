@@ -44,20 +44,55 @@ export function buildComparisonRows({ state, filters }) {
         filters.modelIds.length === 0 || filters.modelIds.includes(rule.modelId);
       return platformMatch && modelMatch;
     })
-    .map((rule) => {
+    .filter((rule) => {
+      if (filters.modelIds.length === 0) return true;
+      const model = state.models.find((item) => item.id === rule.modelId);
+      if (!model) return false;
+      const selectedModels = state.models.filter((m) => filters.modelIds.includes(m.id));
+      const selectedCategories = new Set(selectedModels.map((m) => m.category));
+      return selectedCategories.size === 0 || selectedCategories.has(model.category);
+    })
+    .flatMap((rule) => {
       const platform = state.platforms.find((item) => item.id === rule.platformId);
       const model = state.models.find((item) => item.id === rule.modelId);
-      const plan = state.plans.find((item) => item.id === rule.planId) ?? null;
 
-      return buildComparisonRow({
+      if (rule.pricingMode === 'plan_credit_based') {
+        const platformPlans = state.plans.filter((item) => item.platformId === rule.platformId);
+        
+        if (platformPlans.length === 0) {
+          return [buildComparisonRow({
+            platform,
+            model,
+            plan: null,
+            rule,
+            scenario: filters.scenario,
+            exchangeRates: state.exchangeRates,
+            targetCurrency: filters.targetCurrency,
+          })];
+        }
+        
+        return platformPlans.map((plan) =>
+          buildComparisonRow({
+            platform,
+            model,
+            plan,
+            rule,
+            scenario: filters.scenario,
+            exchangeRates: state.exchangeRates,
+            targetCurrency: filters.targetCurrency,
+          })
+        );
+      }
+      
+      return [buildComparisonRow({
         platform,
         model,
-        plan,
+        plan: null,
         rule,
         scenario: filters.scenario,
         exchangeRates: state.exchangeRates,
         targetCurrency: filters.targetCurrency,
-      });
+      })];
     });
 }
 

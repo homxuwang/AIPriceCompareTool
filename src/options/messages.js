@@ -1,5 +1,11 @@
 const messages = {
   'zh-CN': {
+    category: {
+      text: '文本',
+      image: '图片',
+      video: '视频',
+      audio: '音频',
+    },
     app: {
       title: 'AI SaaS 比价工作台',
       subtitle: '左侧录入数据，中间配置参数、对比条件和计算说明，右侧稳定输出结果表。',
@@ -44,7 +50,24 @@ const messages = {
       exchangeRateStatus: '汇率状态',
       configured: '已配置',
       unconfigured: '未配置',
-      empty: '还没有结果。先录入网站、套餐、模型和规则，再在第二列生成对比表。',
+      empty: '还没有结果，请按以下步骤操作：',
+      modelComparison: '按模型对比（同模型跨平台价格）',
+      costChart: '成本对比图',
+      lowestPrice: '最低价',
+      highestPrice: '最高价',
+      lowest: '最低',
+      highest: '最高',
+      rank: '排名',
+      quantity: '数量',
+      needPlan: '未关联套餐，无法计算',
+      guideStep1Title: '录入网站',
+      guideStep1Desc: '点击左侧"网站"标签，添加你要对比的 AI 平台（如 OpenAI、Midjourney 等）。',
+      guideStep2Title: '录入套餐',
+      guideStep2Desc: '点击"套餐"标签，录入各平台的价格套餐（含价格、积分数量）。如果使用直接价格模式可跳过。',
+      guideStep3Title: '录入模型与价格规则',
+      guideStep3Desc: '点击"模型"添加模型，再点击"模型价格"关联网站和模型，填写消耗和计费方式。',
+      guideStep4Title: '生成对比表',
+      guideStep4Desc: '切换到中间列"对比设置"，选择要对比的模型或平台，点击"生成对比表"。',
     },
     forms: {
       platformTitle: '新建网站',
@@ -53,6 +76,7 @@ const messages = {
       defaultCurrency: '默认币种',
       notes: '备注',
       savePlatform: '保存网站',
+      updatePlatform: '更新网站',
 
       planTitle: '新建套餐',
       planHint: '录入价格、周期和积分总量，供后续积分折算使用。',
@@ -63,19 +87,20 @@ const messages = {
       cycle: '周期',
       credits: '积分数量',
       savePlan: '保存套餐',
+      updatePlan: '更新套餐',
 
       modelTitle: '新建模型',
       modelHint: '模型是跨平台复用的对比对象。',
       modelName: '模型名',
       category: '模型类型',
       saveModel: '保存模型',
+      updateModel: '更新模型',
 
       ruleTitle: '新建模型价格',
       ruleHint: '按网站页面上的购买方式填写，系统会自动把积分换算成目标币种单价。',
       platform: '网站',
       model: '模型',
       pricingMode: '计费模式',
-      linkedPlan: '使用哪个积分包',
       directCurrency: '直接价格币种',
       creditMode: '积分换算：先买积分，模型每次消耗积分',
       directMode: '直接价格：网站已给出每单位价格',
@@ -89,9 +114,10 @@ const messages = {
       audioPerMinute: '每分钟音频消耗',
       consumptionSuffix: '积分或价格',
       conversionPreview: '换算预览',
-      previewPlan: '选择积分包后，这里会显示每积分成本。',
+      previewPlan: '选择网站后，系统会自动使用该网站的所有套餐进行计算。',
       previewUsage: '填入模型消耗后，结果表会自动换算单位成本。',
       saveRule: '保存模型价格',
+      updateRule: '更新模型价格',
 
       settingsTitle: '整体参数',
       targetCurrency: '默认结果币种',
@@ -103,15 +129,31 @@ const messages = {
       saveSettings: '保存整体参数',
 
       comparisonTitle: '对比设置',
-      filterPlatforms: '平台筛选',
-      filterModels: '模型筛选',
+      filterPlatforms: '选择网站',
+      filterModels: '选择模型',
+      comparisonMode: '对比模式',
+      compareByModel: '单价对比（同模型跨平台）',
+      compareByTotalCost: '总价对比（批量生成成本）',
+      addToCompareQueue: '添加到待对比',
+      removeFromCompareQueue: '移除',
+      compareQueue: '待对比列表',
+      compareQueueEmpty: '请从上方选择模型和网站，点击"添加到待对比"',
+      clearCompareQueue: '清空列表',
       runtimeTextInput: '本次文本输入',
       runtimeTextOutput: '本次文本输出',
-      runtimeImageCount: '本次图片张数',
-      runtimeVideoSeconds: '本次视频秒数',
-      runtimeAudioMinutes: '本次音频分钟',
+      runtimeImageCount: '生成图片数量',
+      runtimeDurationSeconds: '时长（秒）',
+      videoHint: '视频模型：输入需要生成的视频秒数',
+      audioHint: '音频模型：输入需要生成的音频秒数（原单位为分钟，自动换算）',
       resultCurrency: '结果币种',
       generate: '生成对比表',
+      unitPrice: '单价',
+      totalCost: '总费用',
+      selectAll: '全选',
+      deselectAll: '取消全选',
+      selectedCount: '已选 {count} 项',
+      noSelection: '请勾选要对比的网站和模型',
+      noData: '暂无数据，请先在左侧录入',
     },
     cards: {
       empty: '暂无数据',
@@ -119,14 +161,28 @@ const messages = {
       unknownModel: '未知模型',
       noNotes: '无备注',
       credits: '积分',
+      edit: '编辑',
+      delete: '删除',
+      confirmDelete: '确定要删除吗？此操作不可撤销。',
     },
     flash: {
       invalidModel: '请先选择一个有效模型。',
+      invalidPlan: '积分换算模式需要选择一个套餐。',
+      requirePlan: '计费模式为"积分换算"时，该网站必须有套餐才能计算单价。请先在"套餐管理"中添加套餐。',
+      requireSelection: '请至少选择一个网站和一个模型。',
       invalidUnits: '当前模型价格没有任何有效的单位价格或积分消耗。',
       platformSaved: '网站已保存',
+      platformUpdated: '网站已更新',
+      platformDeleted: '网站已删除',
       planSaved: '套餐已保存',
+      planUpdated: '套餐已更新',
+      planDeleted: '套餐已删除',
       modelSaved: '模型已保存',
+      modelUpdated: '模型已更新',
+      modelDeleted: '模型已删除',
       ruleSaved: '模型价格已保存',
+      ruleUpdated: '模型价格已更新',
+      ruleDeleted: '模型价格已删除',
       settingsSaved: '整体参数已保存',
       exportDone: 'JSON 已导出。',
       importDone: 'JSON 已导入。',
@@ -134,7 +190,7 @@ const messages = {
       generateFailed: '生成结果失败。',
       generatedPrefix: '已生成',
       generatedSuffix: '条结果。',
-      demoLoaded: '已载入演示数据，现在直接点“生成对比表”就能看到 1.95 CNY。',
+      demoLoaded: '已载入演示数据，现在直接点"生成对比表"就能看到 1.95 CNY。',
     },
     resultsTable: {
       platform: '网站',
@@ -189,7 +245,10 @@ export function createTranslator(locale) {
   const activeMessages = messages[locale] ?? messages['zh-CN'];
 
   return function translate(path) {
-    const result = path.split('.').reduce((current, key) => current?.[key], activeMessages);
+    const result = path.split('.').reduce((current, key) => {
+      if (current === undefined || current === null) return undefined;
+      return current[key];
+    }, activeMessages);
     return result ?? path;
   };
 }

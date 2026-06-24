@@ -11,6 +11,7 @@ export function createEmptyState() {
     plans: [],
     models: [],
     rules: [],
+    compareQueue: [],
     exchangeRates: structuredClone(DEFAULT_EXCHANGE_RATES),
     scenarioDefaults: structuredClone(DEFAULT_SCENARIO),
     preferences: {

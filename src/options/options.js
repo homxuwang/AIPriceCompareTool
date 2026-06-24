@@ -104,6 +104,7 @@ function render() {
           <div class="panel-header">
             <h2>${t('results.title')}</h2>
             <p>${t('results.subtitle')}</p>
+            <button id="btn-fullscreen" class="btn-fullscreen" title="全屏查看">⛶ 全屏</button>
           </div>
           <div class="result-summary">
             <div>
@@ -125,6 +126,18 @@ function render() {
         </section>
       </div>
     </main>
+
+    <div id="fullscreen-modal" class="fullscreen-modal" style="display: none;">
+      <div class="fullscreen-content">
+        <div class="fullscreen-header">
+          <h2>${t('results.title')}</h2>
+          <button id="btn-close-fullscreen" class="btn-close-fullscreen">✕ 关闭</button>
+        </div>
+        <div class="fullscreen-body">
+          ${renderResultsTable(t)}
+        </div>
+      </div>
+    </div>
   `;
 
   bindEvents();
@@ -176,7 +189,7 @@ function renderEntryTabContent(translate) {
     case 'models':
       return `
         ${renderModelForm(translate)}
-        ${renderCards(translate('entry.savedModels'), state.models, (item) => renderModelCard(item), translate)}
+        ${renderCards(translate('entry.savedModels'), state.models, (item) => renderModelCard(item, translate), translate)}
       `;
     case 'rules':
       return `
@@ -356,16 +369,6 @@ function renderRuleForm(translate) {
           </select>
         </div>
         <div class="field">
-          <label for="rule-plan-id">${translate('forms.linkedPlan')}</label>
-          <select id="rule-plan-id" name="planId">
-            <option value="">可留空</option>
-            ${state.plans.map((plan) => {
-              const platform = state.platforms.find((item) => item.id === plan.platformId);
-              return `<option value="${plan.id}">${escapeHtml(platform?.name ?? '')} · ${escapeHtml(plan.name)} · ${plan.price} ${escapeHtml(plan.currency)} / ${plan.creditAmount ?? '-'} 积分</option>`;
-            }).join('')}
-          </select>
-        </div>
-        <div class="field">
           <label for="rule-currency">${translate('forms.directCurrency')}</label>
           <input id="rule-currency" name="currency" value="USD">
         </div>
@@ -476,36 +479,73 @@ function renderComparisonForm(translate) {
   return `
     <form class="grid-form compact" id="comparison-form">
       <div class="field span-3">
-        <label for="compare-platforms">${translate('forms.filterPlatforms')}</label>
-        <select id="compare-platforms" name="platformIds" multiple size="5">
-          ${state.platforms.map((platform) => `<option value="${platform.id}">${platform.name}</option>`).join('')}
+        <label for="compare-mode">${translate('forms.comparisonMode')}</label>
+        <select id="compare-mode" name="comparisonMode">
+          <option value="unitPrice">${translate('forms.compareByModel')}</option>
+          <option value="totalCost">${translate('forms.compareByTotalCost')}</option>
         </select>
       </div>
+      
       <div class="field span-3">
-        <label for="compare-models">${translate('forms.filterModels')}</label>
-        <select id="compare-models" name="modelIds" multiple size="5">
-          ${state.models.map((model) => `<option value="${model.id}">${model.name}</option>`).join('')}
-        </select>
+        <div class="checkbox-group-header">
+          <label>${translate('forms.filterPlatforms')}</label>
+          <span class="checkbox-actions">
+            <button type="button" class="btn-link" onclick="toggleAllCheckboxes('platform', true)">${translate('forms.selectAll')}</button>
+            <button type="button" class="btn-link" onclick="toggleAllCheckboxes('platform', false)">${translate('forms.deselectAll')}</button>
+          </span>
+        </div>
+        <div class="checkbox-list" id="platform-checkboxes">
+          ${state.platforms.map((platform) => `
+            <label class="checkbox-item">
+              <input type="checkbox" name="platformIds" value="${platform.id}" class="compare-checkbox" data-type="platform">
+              <span class="checkbox-label">${escapeHtml(platform.name)}</span>
+            </label>
+          `).join('')}
+          ${state.platforms.length === 0 ? `<div class="checkbox-empty">${translate('forms.noData')}</div>` : ''}
+        </div>
       </div>
-      <div class="field">
+      
+      <div class="field span-3">
+        <div class="checkbox-group-header">
+          <label>${translate('forms.filterModels')}</label>
+          <span class="checkbox-actions">
+            <button type="button" class="btn-link" onclick="toggleAllCheckboxes('model', true)">${translate('forms.selectAll')}</button>
+            <button type="button" class="btn-link" onclick="toggleAllCheckboxes('model', false)">${translate('forms.deselectAll')}</button>
+          </span>
+        </div>
+        <div class="checkbox-list" id="model-checkboxes">
+          ${state.models.map((model) => `
+            <label class="checkbox-item">
+              <input type="checkbox" name="modelIds" value="${model.id}" data-category="${model.category}" class="compare-checkbox" data-type="model">
+              <span class="checkbox-label">${escapeHtml(model.name)}</span>
+              <span class="checkbox-tag tag-${model.category}">${translate('category.' + model.category)}</span>
+            </label>
+          `).join('')}
+          ${state.models.length === 0 ? `<div class="checkbox-empty">${translate('forms.noData')}</div>` : ''}
+        </div>
+      </div>
+
+      <div class="field scenario-field" data-category="text">
         <label for="compare-input">${translate('forms.runtimeTextInput')}</label>
         <input id="compare-input" name="textInputTokens" type="number" step="1" value="${state.scenarioDefaults.textInputTokens}">
       </div>
-      <div class="field">
+      <div class="field scenario-field" data-category="text">
         <label for="compare-output">${translate('forms.runtimeTextOutput')}</label>
         <input id="compare-output" name="textOutputTokens" type="number" step="1" value="${state.scenarioDefaults.textOutputTokens}">
       </div>
-      <div class="field">
+      <div class="field scenario-field" data-category="image">
         <label for="compare-images">${translate('forms.runtimeImageCount')}</label>
         <input id="compare-images" name="imageCount" type="number" step="1" value="${state.scenarioDefaults.imageCount}">
       </div>
-      <div class="field">
-        <label for="compare-video">${translate('forms.runtimeVideoSeconds')}</label>
+      <div class="field scenario-field" data-category="video">
+        <label for="compare-video">${translate('forms.runtimeDurationSeconds')}</label>
         <input id="compare-video" name="videoSeconds" type="number" step="1" value="${state.scenarioDefaults.videoSeconds}">
+        <span class="field-hint">${translate('forms.videoHint')}</span>
       </div>
-      <div class="field">
-        <label for="compare-audio">${translate('forms.runtimeAudioMinutes')}</label>
-        <input id="compare-audio" name="audioMinutes" type="number" step="1" value="${state.scenarioDefaults.audioMinutes}">
+      <div class="field scenario-field" data-category="audio">
+        <label for="compare-audio">${translate('forms.runtimeDurationSeconds')}</label>
+        <input id="compare-audio" name="audioMinutes" type="number" step="1" value="${state.scenarioDefaults.audioMinutes * 60}">
+        <span class="field-hint">${translate('forms.audioHint')}</span>
       </div>
       <div class="field">
         <label>${translate('forms.resultCurrency')}</label>
@@ -537,8 +577,197 @@ function renderCalculationSections(locale) {
 
 function renderResultsTable(translate) {
   if (comparisonRows.length === 0) {
-    return `<div class="empty">${translate('results.empty')}</div>`;
+    return `
+      <div class="empty-guide">
+        <div class="empty">${translate('results.empty')}</div>
+        <div class="guide-steps">
+          <div class="guide-step">
+            <span class="guide-step-num">1</span>
+            <div>
+              <strong>${translate('results.guideStep1Title')}</strong>
+              <p>${translate('results.guideStep1Desc')}</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <span class="guide-step-num">2</span>
+            <div>
+              <strong>${translate('results.guideStep2Title')}</strong>
+              <p>${translate('results.guideStep2Desc')}</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <span class="guide-step-num">3</span>
+            <div>
+              <strong>${translate('results.guideStep3Title')}</strong>
+              <p>${translate('results.guideStep3Desc')}</p>
+            </div>
+          </div>
+          <div class="guide-step">
+            <span class="guide-step-num">4</span>
+            <div>
+              <strong>${translate('results.guideStep4Title')}</strong>
+              <p>${translate('results.guideStep4Desc')}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   }
+
+  const comparisonMode = document.querySelector('#compare-mode')?.value || 'unitPrice';
+
+  if (comparisonMode === 'unitPrice') {
+    return renderUnitPriceComparison(translate);
+  } else {
+    return renderTotalCostComparison(translate);
+  }
+}
+
+function renderUnitPriceComparison(translate) {
+  const groupedByModel = {};
+  comparisonRows.forEach((row) => {
+    if (!groupedByModel[row.modelName]) {
+      groupedByModel[row.modelName] = [];
+    }
+    groupedByModel[row.modelName].push(row);
+  });
+
+  const targetCurrency = state.preferences?.targetCurrency ?? 'CNY';
+
+  return `
+    <div class="comparison-section">
+      <h3>${translate('forms.unitPrice')} - ${translate('results.modelComparison')}</h3>
+      ${Object.entries(groupedByModel).map(([modelName, rows]) => {
+        const costs = rows.map((r) => r.singleRunCost);
+        const minCost = Math.min(...costs);
+        const maxCost = Math.max(...costs);
+        return `
+          <div class="model-group">
+            <div class="model-group-header">
+              <h4>${escapeHtml(modelName)}</h4>
+              <span class="model-price-range">
+                ${minCost === maxCost 
+                  ? `${minCost} ${escapeHtml(targetCurrency)}` 
+                  : `${minCost} ~ ${maxCost} ${escapeHtml(targetCurrency)}`}
+              </span>
+            </div>
+            <table class="comparison-table model-comparison">
+              <thead>
+                <tr>
+                  <th>${translate('resultsTable.platform')}</th>
+                  <th>${translate('resultsTable.pricingMode')}</th>
+                  <th>${translate('resultsTable.planName')}</th>
+                  <th>${translate('resultsTable.convertedUnitCost')}</th>
+                  <th>${translate('resultsTable.singleRunCost')}</th>
+                  <th>${translate('resultsTable.rank')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows
+                  .sort((a, b) => a.singleRunCost - b.singleRunCost)
+                  .map((row, index) => `
+                    <tr class="${index === 0 ? 'best-price' : ''} ${index === rows.length - 1 && rows.length > 1 ? 'worst-price' : ''}">
+                      <td title="${escapeHtml(row.platformName)}">${escapeHtml(row.platformName)}</td>
+                      <td>${escapeHtml(getPricingModeLabel(row.pricingMode))}</td>
+                      <td title="${escapeHtml(row.planName || '-')}">${escapeHtml(row.planName || '-')}</td>
+                      <td>${row.convertedUnitCost != null ? `${row.convertedUnitCost} ${escapeHtml(targetCurrency)}` : '-'}</td>
+                      <td><strong>${row.singleRunCost != null ? `${row.singleRunCost} ${escapeHtml(targetCurrency)}` : `<span class="text-muted">${translate('results.needPlan')}</span>`}</strong></td>
+                      <td>
+                        ${row.singleRunCost != null ? (
+                          index === 0 ? `<span class="rank-badge best">${translate('results.lowestPrice')}</span>` :
+                          index === rows.length - 1 && rows.length > 1 ? `<span class="rank-badge worst">${translate('results.highestPrice')}</span>` : ''
+                        ) : ''}
+                      </td>
+                    </tr>
+                  `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }).join('')}
+      ${renderModelComparisonChart(groupedByModel, targetCurrency, translate)}
+    </div>
+  `;
+}
+
+function renderTotalCostComparison(translate) {
+  const groupedByModel = {};
+  comparisonRows.forEach((row) => {
+    if (!groupedByModel[row.modelName]) {
+      groupedByModel[row.modelName] = [];
+    }
+    groupedByModel[row.modelName].push(row);
+  });
+
+  const targetCurrency = state.preferences?.targetCurrency ?? 'CNY';
+  const scenario = getScenarioFromForm();
+
+  return `
+    <div class="comparison-section">
+      <h3>${translate('forms.totalCost')} - ${translate('results.modelComparison')}</h3>
+      ${Object.entries(groupedByModel).map(([modelName, rows]) => {
+        const totalCosts = rows.map((r) => ({
+          ...r,
+          totalCost: r.singleRunCost != null ? roundDisplay(r.singleRunCost * getQuantity(r.category, scenario)) : null,
+        }));
+        const validCosts = totalCosts.filter((r) => r.totalCost != null).map((r) => r.totalCost);
+        const minCost = validCosts.length > 0 ? Math.min(...validCosts) : null;
+        const maxCost = validCosts.length > 0 ? Math.max(...validCosts) : null;
+        const quantity = getQuantity(rows[0]?.category, scenario);
+        return `
+          <div class="model-group">
+            <div class="model-group-header">
+              <h4>${escapeHtml(modelName)}</h4>
+              <span class="model-price-range">
+                ${translate('results.quantity')}: ${quantity} ${getQuantityUnit(rows[0]?.category)}
+                ${minCost != null && maxCost != null
+                  ? (minCost === maxCost 
+                      ? ` | ${minCost} ${escapeHtml(targetCurrency)}` 
+                      : ` | ${minCost} ~ ${maxCost} ${escapeHtml(targetCurrency)}`)
+                  : ''}
+              </span>
+            </div>
+            <table class="comparison-table model-comparison">
+              <thead>
+                <tr>
+                  <th>${translate('resultsTable.platform')}</th>
+                  <th>${translate('resultsTable.pricingMode')}</th>
+                  <th>${translate('resultsTable.planName')}</th>
+                  <th>${translate('forms.unitPrice')}</th>
+                  <th>${translate('forms.totalCost')}</th>
+                  <th>${translate('resultsTable.rank')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${totalCosts
+                  .sort((a, b) => (a.totalCost ?? Infinity) - (b.totalCost ?? Infinity))
+                  .map((row, index) => `
+                    <tr class="${index === 0 && row.totalCost != null ? 'best-price' : ''} ${index === totalCosts.length - 1 && totalCosts.length > 1 && row.totalCost != null ? 'worst-price' : ''}">
+                      <td title="${escapeHtml(row.platformName)}">${escapeHtml(row.platformName)}</td>
+                      <td>${escapeHtml(getPricingModeLabel(row.pricingMode))}</td>
+                      <td title="${escapeHtml(row.planName || '-')}">${escapeHtml(row.planName || '-')}</td>
+                      <td>${row.singleRunCost != null ? `${row.singleRunCost} ${escapeHtml(targetCurrency)}` : '-'}</td>
+                      <td><strong>${row.totalCost != null ? `${row.totalCost} ${escapeHtml(targetCurrency)}` : `<span class="text-muted">${translate('results.needPlan')}</span>`}</strong></td>
+                      <td>
+                        ${row.totalCost != null ? (
+                          index === 0 ? `<span class="rank-badge best">${translate('results.lowestPrice')}</span>` :
+                          index === totalCosts.length - 1 && totalCosts.length > 1 ? `<span class="rank-badge worst">${translate('results.highestPrice')}</span>` : ''
+                        ) : ''}
+                      </td>
+                    </tr>
+                  `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      }).join('')}
+      ${renderTotalCostChart(groupedByModel, targetCurrency, translate, scenario)}
+    </div>
+  `;
+}
+
+function renderPlatformComparisonTable(translate) {
+  const targetCurrency = state.preferences?.targetCurrency ?? 'CNY';
 
   return `
     <table class="comparison-table">
@@ -558,19 +787,150 @@ function renderResultsTable(translate) {
       <tbody>
         ${comparisonRows.map((row) => `
           <tr>
-            <td>${escapeHtml(row.platformName)}</td>
+            <td title="${escapeHtml(row.platformName)}">${escapeHtml(row.platformName)}</td>
             <td><span class="type-pill">${escapeHtml(getCategoryLabel(row.comparisonType))}</span></td>
-            <td>${escapeHtml(row.modelName)}</td>
+            <td title="${escapeHtml(row.modelName)}">${escapeHtml(row.modelName)}</td>
             <td>${escapeHtml(getPricingModeLabel(row.pricingMode))}</td>
-            <td>${escapeHtml(row.planName || '-')}</td>
+            <td title="${escapeHtml(row.planName || '-')}">${escapeHtml(row.planName || '-')}</td>
             <td>${formatUsageAmount(row)}</td>
             <td>${row.originalUnitCost} ${escapeHtml(row.originalCurrency)}</td>
-            <td>${row.convertedUnitCost} ${escapeHtml(state.preferences?.targetCurrency ?? 'CNY')}</td>
-            <td><strong>${row.singleRunCost} ${escapeHtml(state.preferences?.targetCurrency ?? 'CNY')}</strong></td>
+            <td>${row.convertedUnitCost} ${escapeHtml(targetCurrency)}</td>
+            <td><strong>${row.singleRunCost} ${escapeHtml(targetCurrency)}</strong></td>
           </tr>
         `).join('')}
       </tbody>
     </table>
+  `;
+}
+
+function renderModelComparisonChart(groupedByModel, targetCurrency, translate) {
+  const modelNames = Object.keys(groupedByModel);
+  if (modelNames.length === 0) return '';
+
+  const chartData = modelNames.map((modelName) => {
+    const rows = groupedByModel[modelName];
+    return {
+      modelName,
+      platforms: rows.map((row) => ({
+        platformName: row.platformName,
+        planName: row.planName,
+        singleRunCost: row.singleRunCost,
+      })),
+    };
+  });
+
+  const allCosts = chartData.flatMap((d) => d.platforms.map((p) => p.singleRunCost));
+  const maxCost = Math.max(...allCosts);
+  const chartHeight = 200;
+
+  return `
+    <div class="chart-section">
+      <h4>${translate('results.costChart')}</h4>
+      <div class="chart-container">
+        ${chartData.map((modelData) => {
+          const modelCosts = modelData.platforms.map((p) => p.singleRunCost);
+          const modelMin = Math.min(...modelCosts);
+          const modelMax = Math.max(...modelCosts);
+          return `
+            <div class="chart-group">
+              <div class="chart-group-header">
+                <div class="chart-group-title">${escapeHtml(modelData.modelName)}</div>
+                <div class="chart-group-legend">
+                  <span class="legend-item legend-min">${translate('results.lowest')}: ${modelMin} ${escapeHtml(targetCurrency)}</span>
+                  <span class="legend-item legend-max">${translate('results.highest')}: ${modelMax} ${escapeHtml(targetCurrency)}</span>
+                </div>
+              </div>
+              <div class="chart-bars">
+                ${modelData.platforms.map((platform) => {
+                  const barHeight = maxCost > 0 ? (platform.singleRunCost / maxCost) * chartHeight : 0;
+                  const isMin = platform.singleRunCost === modelMin && modelData.platforms.length > 1;
+                  const isMax = platform.singleRunCost === modelMax && modelData.platforms.length > 1;
+                  const label = platform.planName 
+                    ? `${platform.platformName} (${platform.planName})` 
+                    : platform.platformName;
+                  return `
+                    <div class="chart-bar-wrapper">
+                      <div class="chart-bar ${isMin ? 'bar-min' : ''} ${isMax ? 'bar-max' : ''}" style="height: ${barHeight}px;">
+                        <span class="chart-bar-value">${platform.singleRunCost}</span>
+                      </div>
+                      <div class="chart-bar-label">${escapeHtml(label)}</div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderTotalCostChart(groupedByModel, targetCurrency, translate, scenario) {
+  const modelNames = Object.keys(groupedByModel);
+  if (modelNames.length === 0) return '';
+
+  const chartData = modelNames.map((modelName) => {
+    const rows = groupedByModel[modelName];
+    const category = rows[0]?.category;
+    const quantity = getQuantity(category, scenario);
+    return {
+      modelName,
+      category,
+      quantity,
+      platforms: rows.map((row) => ({
+        platformName: row.platformName,
+        planName: row.planName,
+        totalCost: roundDisplay(row.singleRunCost * quantity),
+      })),
+    };
+  });
+
+  const allCosts = chartData.flatMap((d) => d.platforms.map((p) => p.totalCost));
+  const maxCost = Math.max(...allCosts);
+  const chartHeight = 200;
+
+  return `
+    <div class="chart-section">
+      <h4>${translate('forms.totalCost')} - ${translate('results.costChart')}</h4>
+      <div class="chart-container">
+        ${chartData.map((modelData) => {
+          const modelCosts = modelData.platforms.map((p) => p.totalCost);
+          const modelMin = Math.min(...modelCosts);
+          const modelMax = Math.max(...modelCosts);
+          return `
+            <div class="chart-group">
+              <div class="chart-group-header">
+                <div class="chart-group-title">${escapeHtml(modelData.modelName)}</div>
+                <div class="chart-group-legend">
+                  <span class="legend-item">${modelData.quantity} ${getQuantityUnit(modelData.category)}</span>
+                  <span class="legend-item legend-min">${translate('results.lowest')}: ${modelMin} ${escapeHtml(targetCurrency)}</span>
+                  <span class="legend-item legend-max">${translate('results.highest')}: ${modelMax} ${escapeHtml(targetCurrency)}</span>
+                </div>
+              </div>
+              <div class="chart-bars">
+                ${modelData.platforms.map((platform) => {
+                  const barHeight = maxCost > 0 ? (platform.totalCost / maxCost) * chartHeight : 0;
+                  const isMin = platform.totalCost === modelMin && modelData.platforms.length > 1;
+                  const isMax = platform.totalCost === modelMax && modelData.platforms.length > 1;
+                  const label = platform.planName 
+                    ? `${platform.platformName} (${platform.planName})` 
+                    : platform.platformName;
+                  return `
+                    <div class="chart-bar-wrapper">
+                      <div class="chart-bar ${isMin ? 'bar-min' : ''} ${isMax ? 'bar-max' : ''}" style="height: ${barHeight}px;">
+                        <span class="chart-bar-value">${platform.totalCost}</span>
+                      </div>
+                      <div class="chart-bar-label">${escapeHtml(label)}</div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
   `;
 }
 
@@ -596,6 +956,10 @@ function renderPlatformCard(platform, translate) {
     <article class="card">
       <strong>${escapeHtml(platform.name)}</strong>
       <span class="meta">${escapeHtml(platform.defaultCurrency)} · ${escapeHtml(platform.notes || translate('cards.noNotes'))}</span>
+      <div class="card-actions">
+        <button class="btn-edit" data-action="edit" data-type="platform" data-id="${platform.id}">${translate('cards.edit')}</button>
+        <button class="btn-delete" data-action="delete" data-type="platform" data-id="${platform.id}">${translate('cards.delete')}</button>
+      </div>
     </article>
   `;
 }
@@ -610,15 +974,23 @@ function renderPlanCard(plan, translate) {
         <span class="chip">${escapeHtml(platform?.name || translate('cards.unknownPlatform'))}</span>
         <span class="chip">${translate('cards.credits')} ${plan.creditAmount || '-'}</span>
       </div>
+      <div class="card-actions">
+        <button class="btn-edit" data-action="edit" data-type="plan" data-id="${plan.id}">${translate('cards.edit')}</button>
+        <button class="btn-delete" data-action="delete" data-type="plan" data-id="${plan.id}">${translate('cards.delete')}</button>
+      </div>
     </article>
   `;
 }
 
-function renderModelCard(model) {
+function renderModelCard(model, translate) {
   return `
     <article class="card">
       <strong>${escapeHtml(model.name)}</strong>
       <span class="meta">${escapeHtml(model.category)}</span>
+      <div class="card-actions">
+        <button class="btn-edit" data-action="edit" data-type="model" data-id="${model.id}">${translate('cards.edit')}</button>
+        <button class="btn-delete" data-action="delete" data-type="model" data-id="${model.id}">${translate('cards.delete')}</button>
+      </div>
     </article>
   `;
 }
@@ -626,17 +998,38 @@ function renderModelCard(model) {
 function renderRuleCard(rule, translate) {
   const platform = state.platforms.find((item) => item.id === rule.platformId);
   const model = state.models.find((item) => item.id === rule.modelId);
+  const platformPlans = state.plans.filter((item) => item.platformId === rule.platformId);
+  const hasPlanIssue = rule.pricingMode === 'plan_credit_based' && platformPlans.length === 0;
+  
   return `
-    <article class="card">
+    <article class="card ${hasPlanIssue ? 'card-warning' : ''}">
       <strong>${escapeHtml(model?.name || translate('cards.unknownModel'))}</strong>
       <span class="meta">${escapeHtml(platform?.name || translate('cards.unknownPlatform'))} · ${escapeHtml(getPricingModeLabel(rule.pricingMode))}</span>
       <div class="chips">
         <span class="chip">${escapeHtml(getCategoryLabel(model?.category))}</span>
+        ${hasPlanIssue 
+          ? '<span class="chip chip-warning">该网站无套餐</span>'
+          : (platformPlans.length > 0 ? `<span class="chip chip-plan">${platformPlans.length}个套餐</span>` : '')
+        }
         ${rule.unitDefinitions.map((unit) => `<span class="chip">${escapeHtml(getUnitTypeLabel(unit.unitType))}: ${unit.value}</span>`).join('')}
+      </div>
+      <div class="card-actions">
+        <button class="btn-edit" data-action="edit" data-type="rule" data-id="${rule.id}">${translate('cards.edit')}</button>
+        <button class="btn-delete" data-action="delete" data-type="rule" data-id="${rule.id}">${translate('cards.delete')}</button>
       </div>
     </article>
   `;
 }
+
+window.toggleAllCheckboxes = function(type, checked) {
+  const selector = type === 'platform' ? '#platform-checkboxes' : '#model-checkboxes';
+  const container = document.querySelector(selector);
+  if (container) {
+    container.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.checked = checked;
+    });
+  }
+};
 
 function bindEvents() {
   document.querySelector('#platform-form')?.addEventListener('submit', handlePlatformSubmit);
@@ -645,6 +1038,9 @@ function bindEvents() {
   document.querySelector('#rule-form')?.addEventListener('submit', handleRuleSubmit);
   document.querySelector('#settings-form')?.addEventListener('submit', handleSettingsSubmit);
   document.querySelector('#comparison-form')?.addEventListener('submit', handleComparisonSubmit);
+  document.querySelectorAll('.compare-checkbox').forEach((cb) => {
+    cb.addEventListener('change', updateScenarioFieldVisibility);
+  });
   document.querySelector('#rule-form')?.addEventListener('input', handleRulePreviewChange);
   document.querySelector('#rule-form')?.addEventListener('change', handleRulePreviewChange);
   document.querySelector('#export-json')?.addEventListener('click', handleExport);
@@ -653,7 +1049,13 @@ function bindEvents() {
   document.querySelectorAll('[data-tab-group]').forEach((button) => {
     button.addEventListener('click', handleTabClick);
   });
+  document.querySelectorAll('.card-actions').forEach((container) => {
+    container.addEventListener('click', handleCardAction);
+  });
+  document.querySelector('#btn-fullscreen')?.addEventListener('click', openFullscreen);
+  document.querySelector('#btn-close-fullscreen')?.addEventListener('click', closeFullscreen);
   updateRulePreview();
+  updateScenarioFieldVisibility();
 }
 
 function handleTabClick(event) {
@@ -662,68 +1064,166 @@ function handleTabClick(event) {
   render();
 }
 
+function openFullscreen() {
+  const modal = document.querySelector('#fullscreen-modal');
+  if (modal) {
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+}
+
+function closeFullscreen() {
+  const modal = document.querySelector('#fullscreen-modal');
+  if (modal) {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+}
+
 function handleRulePreviewChange() {
   updateRulePreview();
 }
 
 async function handlePlatformSubmit(event) {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
-  const platform = {
-    id: createId('platform'),
-    name: String(formData.get('name')).trim(),
-    defaultCurrency: String(formData.get('defaultCurrency')).trim().toUpperCase(),
-    notes: String(formData.get('notes')).trim(),
-  };
-
-  await updateState((draft) => {
-    draft.platforms.push(platform);
-  }, t('flash.platformSaved'));
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const editId = form.dataset.editId;
+  
+  if (editId) {
+    const platform = {
+      id: editId,
+      name: String(formData.get('name')).trim(),
+      defaultCurrency: String(formData.get('defaultCurrency')).trim().toUpperCase(),
+      notes: String(formData.get('notes')).trim(),
+    };
+    await updateState((draft) => {
+      const index = draft.platforms.findIndex((item) => item.id === editId);
+      if (index !== -1) {
+        draft.platforms[index] = platform;
+      }
+    }, t('flash.platformUpdated'));
+  } else {
+    const platform = {
+      id: createId('platform'),
+      name: String(formData.get('name')).trim(),
+      defaultCurrency: String(formData.get('defaultCurrency')).trim().toUpperCase(),
+      notes: String(formData.get('notes')).trim(),
+    };
+    await updateState((draft) => {
+      draft.platforms.push(platform);
+    }, t('flash.platformSaved'));
+  }
+  
+  form.reset();
+  delete form.dataset.editId;
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.textContent = t('forms.savePlatform');
 }
 
 async function handlePlanSubmit(event) {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
-  const plan = {
-    id: createId('plan'),
-    platformId: String(formData.get('platformId')),
-    name: String(formData.get('name')).trim(),
-    price: Number(formData.get('price')),
-    currency: String(formData.get('currency')).trim().toUpperCase(),
-    billingCycle: String(formData.get('billingCycle')).trim(),
-    creditAmount: formData.get('creditAmount') ? Number(formData.get('creditAmount')) : null,
-    notes: String(formData.get('notes')).trim(),
-  };
-
-  await updateState((draft) => {
-    draft.plans.push(plan);
-  }, t('flash.planSaved'));
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const editId = form.dataset.editId;
+  
+  if (editId) {
+    const plan = {
+      id: editId,
+      platformId: String(formData.get('platformId')),
+      name: String(formData.get('name')).trim(),
+      price: Number(formData.get('price')),
+      currency: String(formData.get('currency')).trim().toUpperCase(),
+      billingCycle: String(formData.get('billingCycle')).trim(),
+      creditAmount: formData.get('creditAmount') ? Number(formData.get('creditAmount')) : null,
+      notes: String(formData.get('notes')).trim(),
+    };
+    await updateState((draft) => {
+      const index = draft.plans.findIndex((item) => item.id === editId);
+      if (index !== -1) {
+        draft.plans[index] = plan;
+      }
+    }, t('flash.planUpdated'));
+  } else {
+    const plan = {
+      id: createId('plan'),
+      platformId: String(formData.get('platformId')),
+      name: String(formData.get('name')).trim(),
+      price: Number(formData.get('price')),
+      currency: String(formData.get('currency')).trim().toUpperCase(),
+      billingCycle: String(formData.get('billingCycle')).trim(),
+      creditAmount: formData.get('creditAmount') ? Number(formData.get('creditAmount')) : null,
+      notes: String(formData.get('notes')).trim(),
+    };
+    await updateState((draft) => {
+      draft.plans.push(plan);
+    }, t('flash.planSaved'));
+  }
+  
+  form.reset();
+  delete form.dataset.editId;
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.textContent = t('forms.savePlan');
 }
 
 async function handleModelSubmit(event) {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
-  const model = {
-    id: createId('model'),
-    name: String(formData.get('name')).trim(),
-    category: String(formData.get('category')),
-  };
-
-  await updateState((draft) => {
-    draft.models.push(model);
-  }, t('flash.modelSaved'));
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const editId = form.dataset.editId;
+  
+  if (editId) {
+    const model = {
+      id: editId,
+      name: String(formData.get('name')).trim(),
+      category: String(formData.get('category')),
+    };
+    await updateState((draft) => {
+      const index = draft.models.findIndex((item) => item.id === editId);
+      if (index !== -1) {
+        draft.models[index] = model;
+      }
+    }, t('flash.modelUpdated'));
+  } else {
+    const model = {
+      id: createId('model'),
+      name: String(formData.get('name')).trim(),
+      category: String(formData.get('category')),
+    };
+    await updateState((draft) => {
+      draft.models.push(model);
+    }, t('flash.modelSaved'));
+  }
+  
+  form.reset();
+  delete form.dataset.editId;
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.textContent = t('forms.saveModel');
 }
 
 async function handleRuleSubmit(event) {
   event.preventDefault();
-  const formData = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  const editId = form.dataset.editId;
   const modelId = String(formData.get('modelId'));
   const model = state.models.find((item) => item.id === modelId);
+  const pricingMode = String(formData.get('pricingMode'));
 
   if (!model) {
     setFlash('error', t('flash.invalidModel'));
     render();
     return;
+  }
+
+  if (pricingMode === 'plan_credit_based') {
+    const platformId = String(formData.get('platformId'));
+    const platformPlans = state.plans.filter((item) => item.platformId === platformId);
+    if (platformPlans.length === 0) {
+      setFlash('error', t('flash.requirePlan'));
+      render();
+      return;
+    }
   }
 
   const unitDefinitions = buildUnitDefinitions({
@@ -737,20 +1237,42 @@ async function handleRuleSubmit(event) {
     return;
   }
 
-  const rule = {
-    id: createId('rule'),
-    platformId: String(formData.get('platformId')),
-    modelId,
-    pricingMode: String(formData.get('pricingMode')),
-    planId: String(formData.get('planId')) || null,
-    currency: String(formData.get('currency')).trim().toUpperCase(),
-    unitDefinitions,
-    notes: String(formData.get('notes')).trim(),
-  };
-
-  await updateState((draft) => {
-    draft.rules.push(rule);
-  }, t('flash.ruleSaved'));
+  if (editId) {
+    const rule = {
+      id: editId,
+      platformId: String(formData.get('platformId')),
+      modelId,
+      pricingMode,
+      currency: String(formData.get('currency')).trim().toUpperCase(),
+      unitDefinitions,
+      notes: String(formData.get('notes')).trim(),
+    };
+    await updateState((draft) => {
+      const index = draft.rules.findIndex((item) => item.id === editId);
+      if (index !== -1) {
+        draft.rules[index] = rule;
+      }
+    }, t('flash.ruleUpdated'));
+  } else {
+    const rule = {
+      id: createId('rule'),
+      platformId: String(formData.get('platformId')),
+      modelId,
+      pricingMode,
+      currency: String(formData.get('currency')).trim().toUpperCase(),
+      unitDefinitions,
+      notes: String(formData.get('notes')).trim(),
+    };
+    await updateState((draft) => {
+      draft.rules.push(rule);
+    }, t('flash.ruleSaved'));
+  }
+  
+  form.reset();
+  delete form.dataset.editId;
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.textContent = t('forms.saveRule');
+  updateRulePreview();
 }
 
 async function handleSettingsSubmit(event) {
@@ -785,20 +1307,29 @@ async function handleSettingsSubmit(event) {
 function handleComparisonSubmit(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
-  const platformIds = getSelectedValues(document.querySelector('#compare-platforms'));
-  const modelIds = getSelectedValues(document.querySelector('#compare-models'));
+  const platformIds = formData.getAll('platformIds');
+  const modelIds = formData.getAll('modelIds');
+  const comparisonMode = String(formData.get('comparisonMode')) || 'unitPrice';
+  const audioSeconds = Number(formData.get('audioMinutes')) || 0;
   const filters = {
     platformIds,
     modelIds,
+    comparisonMode,
     targetCurrency: state.preferences?.targetCurrency ?? 'CNY',
     scenario: {
       textInputTokens: Number(formData.get('textInputTokens')),
       textOutputTokens: Number(formData.get('textOutputTokens')),
       imageCount: Number(formData.get('imageCount')),
       videoSeconds: Number(formData.get('videoSeconds')),
-      audioMinutes: Number(formData.get('audioMinutes')),
+      audioMinutes: audioSeconds / 60,
     },
   };
+
+  if (platformIds.length === 0 || modelIds.length === 0) {
+    setFlash('error', t('flash.requireSelection'));
+    render();
+    return;
+  }
 
   try {
     comparisonRows = buildComparisonRows({ state, filters });
@@ -808,6 +1339,191 @@ function handleComparisonSubmit(event) {
   }
 
   render();
+}
+
+function handleCardAction(event) {
+  const button = event.target.closest('[data-action]');
+  if (!button) return;
+
+  const action = button.dataset.action;
+  const type = button.dataset.type;
+  const id = button.dataset.id;
+
+  if (action === 'edit') {
+    handleEdit(type, id);
+  } else if (action === 'delete') {
+    handleDelete(type, id);
+  }
+}
+
+function handleEdit(type, id) {
+  const locale = getLocale();
+  const translate = createTranslator(locale);
+
+  switch (type) {
+    case 'platform': {
+      const platform = state.platforms.find((item) => item.id === id);
+      if (!platform) return;
+      populatePlatformForm(platform, translate);
+      break;
+    }
+    case 'plan': {
+      const plan = state.plans.find((item) => item.id === id);
+      if (!plan) return;
+      populatePlanForm(plan, translate);
+      break;
+    }
+    case 'model': {
+      const model = state.models.find((item) => item.id === id);
+      if (!model) return;
+      populateModelForm(model, translate);
+      break;
+    }
+    case 'rule': {
+      const rule = state.rules.find((item) => item.id === id);
+      if (!rule) return;
+      populateRuleForm(rule, translate);
+      break;
+    }
+  }
+}
+
+function handleDelete(type, id) {
+  const locale = getLocale();
+  const translate = createTranslator(locale);
+  const confirmed = confirm(translate('cards.confirmDelete'));
+  if (!confirmed) return;
+
+  switch (type) {
+    case 'platform':
+      deletePlatform(id);
+      break;
+    case 'plan':
+      deletePlan(id);
+      break;
+    case 'model':
+      deleteModel(id);
+      break;
+    case 'rule':
+      deleteRule(id);
+      break;
+  }
+}
+
+function populatePlatformForm(platform, translate) {
+  const form = document.querySelector('#platform-form');
+  if (!form) return;
+  form.dataset.editId = platform.id;
+  form.querySelector('#platform-name').value = platform.name;
+  form.querySelector('#platform-currency').value = platform.defaultCurrency;
+  form.querySelector('#platform-notes').value = platform.notes || '';
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.textContent = translate('forms.updatePlatform') || '更新网站';
+}
+
+function populatePlanForm(plan, translate) {
+  const form = document.querySelector('#plan-form');
+  if (!form) return;
+  form.dataset.editId = plan.id;
+  form.querySelector('#plan-platform-id').value = plan.platformId;
+  form.querySelector('#plan-name').value = plan.name;
+  form.querySelector('#plan-price').value = plan.price;
+  form.querySelector('#plan-currency').value = plan.currency;
+  form.querySelector('#plan-cycle').value = plan.billingCycle;
+  form.querySelector('#plan-credits').value = plan.creditAmount || '';
+  form.querySelector('#plan-notes').value = plan.notes || '';
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.textContent = translate('forms.updatePlan') || '更新套餐';
+}
+
+function populateModelForm(model, translate) {
+  const form = document.querySelector('#model-form');
+  if (!form) return;
+  form.dataset.editId = model.id;
+  form.querySelector('#model-name').value = model.name;
+  form.querySelector('#model-category').value = model.category;
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.textContent = translate('forms.updateModel') || '更新模型';
+}
+
+function populateRuleForm(rule, translate) {
+  const form = document.querySelector('#rule-form');
+  if (!form) return;
+  form.dataset.editId = rule.id;
+  form.querySelector('#rule-platform-id').value = rule.platformId;
+  form.querySelector('#rule-model-id').value = rule.modelId;
+  form.querySelector('#rule-mode').value = rule.pricingMode;
+  form.querySelector('#rule-plan-id').value = rule.planId || '';
+  form.querySelector('#rule-currency').value = rule.currency;
+  form.querySelector('#rule-notes').value = rule.notes || '';
+  
+  rule.unitDefinitions.forEach((unit) => {
+    const inputName = getUnitInputName(unit.unitType);
+    const input = form.querySelector(`[name="${inputName}"]`);
+    if (input) input.value = unit.value;
+  });
+  
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.textContent = translate('forms.updateRule') || '更新模型价格';
+  updateRulePreview();
+}
+
+function getUnitInputName(unitType) {
+  const mapping = {
+    'per_1k_input_tokens': 'textInputCreditsPer1k',
+    'per_1k_output_tokens': 'textOutputCreditsPer1k',
+    'per_image': 'imageCreditsPerUnit',
+    'per_second': 'videoCreditsPerSecond',
+    'per_minute': 'videoCreditsPerMinute',
+  };
+  return mapping[unitType] || unitType;
+}
+
+async function deletePlatform(id) {
+  await updateState((draft) => {
+    draft.platforms = draft.platforms.filter((item) => item.id !== id);
+    draft.plans = draft.plans.filter((item) => item.platformId !== id);
+    draft.rules = draft.rules.filter((item) => item.platformId !== id);
+  }, t('flash.platformDeleted'));
+}
+
+async function deletePlan(id) {
+  await updateState((draft) => {
+    draft.plans = draft.plans.filter((item) => item.id !== id);
+    draft.rules = draft.rules.filter((item) => item.planId !== id);
+  }, t('flash.planDeleted'));
+}
+
+async function deleteModel(id) {
+  await updateState((draft) => {
+    draft.models = draft.models.filter((item) => item.id !== id);
+    draft.rules = draft.rules.filter((item) => item.modelId !== id);
+  }, t('flash.modelDeleted'));
+}
+
+async function deleteRule(id) {
+  await updateState((draft) => {
+    draft.rules = draft.rules.filter((item) => item.id !== id);
+  }, t('flash.ruleDeleted'));
+}
+
+function updateScenarioFieldVisibility() {
+  const checkboxes = document.querySelectorAll('.compare-checkbox[data-type="model"]');
+  const selectedCategories = new Set();
+  checkboxes.forEach((cb) => {
+    if (cb.checked) {
+      selectedCategories.add(cb.dataset.category);
+    }
+  });
+
+  document.querySelectorAll('.scenario-field').forEach((field) => {
+    const fieldCategory = field.dataset.category;
+    if (selectedCategories.size === 0) {
+      field.style.display = '';
+    } else {
+      field.style.display = selectedCategories.has(fieldCategory) ? '' : 'none';
+    }
+  });
 }
 
 function handleExport() {
@@ -881,6 +1597,54 @@ function createId(prefix) {
 
 function getSelectedValues(select) {
   return Array.from(select?.selectedOptions ?? []).map((option) => option.value);
+}
+
+function getScenarioFromForm() {
+  const form = document.querySelector('#comparison-form');
+  if (!form) return state.scenarioDefaults;
+  const formData = new FormData(form);
+  const audioSeconds = Number(formData.get('audioMinutes')) || 0;
+  return {
+    textInputTokens: Number(formData.get('textInputTokens')) || state.scenarioDefaults.textInputTokens,
+    textOutputTokens: Number(formData.get('textOutputTokens')) || state.scenarioDefaults.textOutputTokens,
+    imageCount: Number(formData.get('imageCount')) || state.scenarioDefaults.imageCount,
+    videoSeconds: Number(formData.get('videoSeconds')) || state.scenarioDefaults.videoSeconds,
+    audioMinutes: audioSeconds / 60,
+  };
+}
+
+function getQuantity(category, scenario) {
+  switch (category) {
+    case 'text':
+      return 1;
+    case 'image':
+      return scenario.imageCount || 1;
+    case 'video':
+      return scenario.videoSeconds || 1;
+    case 'audio':
+      return (scenario.audioMinutes || 1) * 60;
+    default:
+      return 1;
+  }
+}
+
+function getQuantityUnit(category) {
+  switch (category) {
+    case 'text':
+      return '次';
+    case 'image':
+      return '张';
+    case 'video':
+      return '秒';
+    case 'audio':
+      return '秒';
+    default:
+      return '单位';
+  }
+}
+
+function roundDisplay(value) {
+  return Number(value.toFixed(6));
 }
 
 function updateRulePreview() {
@@ -1011,10 +1775,6 @@ function getUnitTypeLabel(unitType) {
     per_minute: '每分钟',
   };
   return labels[unitType] ?? unitType;
-}
-
-function roundDisplay(value) {
-  return Number(value.toFixed(6));
 }
 
 function setFlash(type, message) {
