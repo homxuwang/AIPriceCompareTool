@@ -44,6 +44,39 @@ test('builds partial text unit definitions from form values', () => {
   assert.deepEqual(unitDefinitions, [{ unitType: 'per_1k_input_tokens', value: 0.1 }]);
 });
 
+test('builds partial text unit definitions from guided per-1k consumption fields', () => {
+  const unitDefinitions = buildUnitDefinitions({
+    category: 'text',
+    values: {
+      textInputCreditsPer1k: '0.0009',
+      textOutputCreditsPer1k: '',
+    },
+  });
+
+  assert.deepEqual(unitDefinitions, [{ unitType: 'per_1k_input_tokens', value: 0.0009 }]);
+});
+
+test('shows text per-1k consumption fields including cached input for text models', () => {
+  assert.deepEqual(getVisibleConsumptionFieldNames('text'), [
+    'textInputCreditsPer1k',
+    'textOutputCreditsPer1k',
+    'textCachedInputCreditsPer1k',
+  ]);
+});
+
+test('builds cached-input text unit definitions from guided per-1k consumption fields', () => {
+  const unitDefinitions = buildUnitDefinitions({
+    category: 'text',
+    values: {
+      textCachedInputCreditsPer1k: '0.00009',
+    },
+  });
+
+  assert.deepEqual(unitDefinitions, [
+    { unitType: 'per_1k_cached_input_tokens', value: 0.00009 },
+  ]);
+});
+
 test('builds comparison rows using selected platforms and models', () => {
   const rows = buildComparisonRows({
     state: {

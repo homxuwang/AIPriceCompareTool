@@ -1,7 +1,7 @@
 import { buildComparisonRow } from '../lib/calculation.js';
 
 const consumptionFieldsByCategory = {
-  text: ['textInputCreditsPer1k', 'textOutputCreditsPer1k'],
+  text: ['textInputCreditsPer1k', 'textOutputCreditsPer1k', 'textCachedInputCreditsPer1k'],
   image: ['imageCreditsPerUnit'],
   video: ['videoCreditsPerSecond', 'videoCreditsPerMinute'],
   audio: ['audioCreditsPerSecond', 'audioCreditsPerMinute'],
@@ -13,6 +13,7 @@ export function buildUnitDefinitions({ category, values }) {
       return compactUnitDefinitions([
         ['per_1k_input_tokens', values.textInputCreditsPer1k ?? values.textInputValue],
         ['per_1k_output_tokens', values.textOutputCreditsPer1k ?? values.textOutputValue],
+        ['per_1k_cached_input_tokens', values.textCachedInputCreditsPer1k],
       ]);
     case 'image':
       return compactUnitDefinitions([['per_image', values.imageCreditsPerUnit ?? values.imageValue]]);
