@@ -14,6 +14,10 @@ import {
 } from './helpers.js';
 import {
   buildQuickEntryMutation,
+  clearComparisonRowsAfterSavedDataChange,
+  deleteModelWithDependents,
+  deletePlanWithDependents,
+  deletePlatformWithDependents,
   validateQuickEntryDraft,
 } from './quick-entry.js';
 import {
@@ -1870,31 +1874,33 @@ function getUnitInputName(unitType) {
 }
 
 async function deletePlatform(id) {
-  await updateState((draft) => {
-    draft.platforms = draft.platforms.filter((item) => item.id !== id);
-    draft.plans = draft.plans.filter((item) => item.platformId !== id);
-    draft.rules = draft.rules.filter((item) => item.platformId !== id);
-  }, t('flash.platformDeleted'));
+  state = await repository.saveState(deletePlatformWithDependents(state, id));
+  comparisonRows = clearComparisonRowsAfterSavedDataChange();
+  setFlash('success', t('flash.platformDeleted'));
+  render();
 }
 
 async function deletePlan(id) {
-  await updateState((draft) => {
-    draft.plans = draft.plans.filter((item) => item.id !== id);
-    draft.rules = draft.rules.filter((item) => item.planId !== id);
-  }, t('flash.planDeleted'));
+  state = await repository.saveState(deletePlanWithDependents(state, id));
+  comparisonRows = clearComparisonRowsAfterSavedDataChange();
+  setFlash('success', t('flash.planDeleted'));
+  render();
 }
 
 async function deleteModel(id) {
-  await updateState((draft) => {
-    draft.models = draft.models.filter((item) => item.id !== id);
-    draft.rules = draft.rules.filter((item) => item.modelId !== id);
-  }, t('flash.modelDeleted'));
+  state = await repository.saveState(deleteModelWithDependents(state, id));
+  comparisonRows = clearComparisonRowsAfterSavedDataChange();
+  setFlash('success', t('flash.modelDeleted'));
+  render();
 }
 
 async function deleteRule(id) {
-  await updateState((draft) => {
-    draft.rules = draft.rules.filter((item) => item.id !== id);
-  }, t('flash.ruleDeleted'));
+  const nextState = structuredClone(state);
+  nextState.rules = nextState.rules.filter((item) => item.id !== id);
+  state = await repository.saveState(nextState);
+  comparisonRows = clearComparisonRowsAfterSavedDataChange();
+  setFlash('success', t('flash.ruleDeleted'));
+  render();
 }
 
 function updateScenarioFieldVisibility() {
@@ -1974,6 +1980,7 @@ async function updateState(mutator, successMessage) {
   const draft = structuredClone(state);
   mutator(draft);
   state = await repository.saveState(draft);
+  comparisonRows = clearComparisonRowsAfterSavedDataChange(comparisonRows);
   setFlash('success', successMessage);
   render();
 }

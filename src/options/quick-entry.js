@@ -72,6 +72,32 @@ export function buildQuickEntryMutation({ state, draft, createId = createGenerat
   return { nextState, platform, plan, model, rule };
 }
 
+export function deletePlatformWithDependents(state, platformId) {
+  const nextState = structuredClone(state);
+  nextState.platforms = nextState.platforms.filter((item) => item.id !== platformId);
+  nextState.plans = nextState.plans.filter((item) => item.platformId !== platformId);
+  nextState.rules = nextState.rules.filter((item) => item.platformId !== platformId);
+  return nextState;
+}
+
+export function deletePlanWithDependents(state, planId) {
+  const nextState = structuredClone(state);
+  nextState.plans = nextState.plans.filter((item) => item.id !== planId);
+  nextState.rules = nextState.rules.filter((item) => item.planId !== planId);
+  return nextState;
+}
+
+export function deleteModelWithDependents(state, modelId) {
+  const nextState = structuredClone(state);
+  nextState.models = nextState.models.filter((item) => item.id !== modelId);
+  nextState.rules = nextState.rules.filter((item) => item.modelId !== modelId);
+  return nextState;
+}
+
+export function clearComparisonRowsAfterSavedDataChange(_rows = []) {
+  return [];
+}
+
 function resolvePlatform(nextState, draft, createId) {
   const platformName = trimValue(draft.platformName);
   const existing = findPlatform(nextState, draft);

@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildQuickEntryMutation,
+  clearComparisonRowsAfterSavedDataChange,
+  deleteModelWithDependents,
+  deletePlanWithDependents,
+  deletePlatformWithDependents,
   validateQuickEntryDraft,
 } from '../src/options/quick-entry.js';
 
@@ -182,6 +186,90 @@ test('buildQuickEntryMutation stores only valid unit definitions', () => {
   assert.deepEqual(result.rule.unitDefinitions, [
     { unitType: 'per_1k_input_tokens', value: 1 },
   ]);
+});
+
+test('deletePlatformWithDependents removes platform p1, plans where platformId p1, and rules where platformId p1', () => {
+  const state = createState({
+    platforms: [
+      { id: 'p1', name: 'Delete AI', defaultCurrency: 'USD' },
+      { id: 'p2', name: 'Keep AI', defaultCurrency: 'EUR' },
+    ],
+    plans: [
+      { id: 'plan-p1', platformId: 'p1', name: 'Delete plan' },
+      { id: 'plan-p2', platformId: 'p2', name: 'Keep plan' },
+    ],
+    models: [{ id: 'm1', name: 'Shared model', category: 'text' }],
+    rules: [
+      { id: 'rule-p1', platformId: 'p1', modelId: 'm1', planId: 'plan-p1' },
+      { id: 'rule-p2', platformId: 'p2', modelId: 'm1', planId: 'plan-p2' },
+    ],
+  });
+
+  const nextState = deletePlatformWithDependents(state, 'p1');
+
+  assert.deepEqual(nextState.platforms, [state.platforms[1]]);
+  assert.deepEqual(nextState.plans, [state.plans[1]]);
+  assert.deepEqual(nextState.models, state.models);
+  assert.deepEqual(nextState.rules, [state.rules[1]]);
+  assert.equal(state.platforms.length, 2);
+  assert.equal(state.plans.length, 2);
+  assert.equal(state.rules.length, 2);
+});
+
+test('deletePlanWithDependents removes plan id and rules with that planId, but leaves direct-price rules without that planId', () => {
+  const state = createState({
+    platforms: [{ id: 'p1', name: 'AI', defaultCurrency: 'USD' }],
+    plans: [
+      { id: 'plan-delete', platformId: 'p1', name: 'Delete plan' },
+      { id: 'plan-keep', platformId: 'p1', name: 'Keep plan' },
+    ],
+    models: [{ id: 'm1', name: 'Model', category: 'text' }],
+    rules: [
+      { id: 'rule-plan-delete', platformId: 'p1', modelId: 'm1', pricingMode: 'plan_credit_based', planId: 'plan-delete' },
+      { id: 'rule-plan-keep', platformId: 'p1', modelId: 'm1', pricingMode: 'plan_credit_based', planId: 'plan-keep' },
+      { id: 'rule-direct', platformId: 'p1', modelId: 'm1', pricingMode: 'direct_price_based', currency: 'USD' },
+    ],
+  });
+
+  const nextState = deletePlanWithDependents(state, 'plan-delete');
+
+  assert.deepEqual(nextState.plans, [state.plans[1]]);
+  assert.deepEqual(nextState.rules, [state.rules[1], state.rules[2]]);
+  assert.equal(state.plans.length, 2);
+  assert.equal(state.rules.length, 3);
+});
+
+test('deleteModelWithDependents removes model id and rules with that modelId', () => {
+  const state = createState({
+    platforms: [{ id: 'p1', name: 'AI', defaultCurrency: 'USD' }],
+    plans: [{ id: 'plan-1', platformId: 'p1', name: 'Plan' }],
+    models: [
+      { id: 'model-delete', name: 'Delete model', category: 'text' },
+      { id: 'model-keep', name: 'Keep model', category: 'image' },
+    ],
+    rules: [
+      { id: 'rule-delete', platformId: 'p1', modelId: 'model-delete' },
+      { id: 'rule-keep', platformId: 'p1', modelId: 'model-keep' },
+    ],
+  });
+
+  const nextState = deleteModelWithDependents(state, 'model-delete');
+
+  assert.deepEqual(nextState.models, [state.models[1]]);
+  assert.deepEqual(nextState.rules, [state.rules[1]]);
+  assert.deepEqual(nextState.platforms, state.platforms);
+  assert.deepEqual(nextState.plans, state.plans);
+  assert.equal(state.models.length, 2);
+  assert.equal(state.rules.length, 2);
+});
+
+test('clearComparisonRowsAfterSavedDataChange clears cached comparison rows', () => {
+  const rows = [
+    { platformName: 'Deleted AI', modelName: 'stale-model' },
+  ];
+
+  assert.deepEqual(clearComparisonRowsAfterSavedDataChange(rows), []);
+  assert.equal(rows.length, 1);
 });
 
 function createSequentialId() {
