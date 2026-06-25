@@ -106,6 +106,13 @@ function getScenarioMultiplier(unitType, category, scenario) {
       return scenario.textInputTokens / 1000;
     case 'per_1k_output_tokens':
       return scenario.textOutputTokens / 1000;
+    case 'per_1k_cached_input_tokens':
+      return (scenario.cachedInputTokens ?? 0) / 1000;
+    // Retain legacy million-token units used by existing saved pricing data.
+    case 'per_1m_input_tokens':
+      return scenario.textInputTokens / 1000000;
+    case 'per_1m_output_tokens':
+      return scenario.textOutputTokens / 1000000;
     case 'per_image':
       return scenario.imageCount;
     case 'per_second':
