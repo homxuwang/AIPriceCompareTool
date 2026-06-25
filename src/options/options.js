@@ -13,9 +13,14 @@ import {
   getVisibleConsumptionFieldNames,
 } from './helpers.js';
 import {
+  buildQuickEntryMutation,
+  validateQuickEntryDraft,
+} from './quick-entry.js';
+import {
   buildCalculationSections,
   createTranslator,
 } from './messages.js';
+import { normalizeDirectUnitDefinitions } from './unit-normalization.js';
 
 const app = document.querySelector('#app');
 const repository = canUseChromeStorage()
@@ -23,8 +28,9 @@ const repository = canUseChromeStorage()
   : createInMemoryRepository();
 
 const tabState = {
-  entry: 'platforms',
+  entry: 'quickEntry',
   controls: 'settings',
+  selectedPlatformId: null,
 };
 
 let state = await repository.loadState();
@@ -73,12 +79,6 @@ function render() {
           <div class="panel-header">
             <h2>${t('entry.title')}</h2>
             <p>${t('entry.subtitle')}</p>
-          </div>
-          <div class="tab-strip">
-            ${renderTabButton('entry', 'platforms', t('entry.platforms'))}
-            ${renderTabButton('entry', 'plans', t('entry.plans'))}
-            ${renderTabButton('entry', 'models', t('entry.models'))}
-            ${renderTabButton('entry', 'rules', t('entry.rules'))}
           </div>
           <div class="panel-body stack">
             ${renderEntryTabContent(t)}
@@ -175,30 +175,236 @@ function renderTabButton(group, value, label) {
 }
 
 function renderEntryTabContent(translate) {
+  return `
+    <div class="tab-strip">
+      ${renderTabButton('entry', 'quickEntry', translate('entry.quickEntry'))}
+      ${renderTabButton('entry', 'platforms', translate('entry.platforms'))}
+      ${renderTabButton('entry', 'plans', translate('entry.plans'))}
+      ${renderTabButton('entry', 'models', translate('entry.models'))}
+      ${renderTabButton('entry', 'rules', translate('entry.rules'))}
+    </div>
+    ${renderEntryTabPanel(translate)}
+  `;
+}
+
+function renderEntryTabPanel(translate) {
   switch (tabState.entry) {
+    case 'quickEntry':
+      return renderQuickEntryForm(translate);
     case 'platforms':
       return `
         ${renderPlatformForm(translate)}
-        ${renderCards(translate('entry.savedPlatforms'), state.platforms, (item) => renderPlatformCard(item, translate), translate)}
+        ${renderCards(translate('entry.savedPlatforms'), state.platforms, (platform) => renderPlatformCard(platform, translate), translate)}
       `;
     case 'plans':
       return `
         ${renderPlanForm(translate)}
-        ${renderCards(translate('entry.savedPlans'), state.plans, (item) => renderPlanCard(item, translate), translate)}
+        ${renderCards(translate('entry.savedPlans'), state.plans, (plan) => renderPlanCard(plan, translate), translate)}
       `;
     case 'models':
       return `
         ${renderModelForm(translate)}
-        ${renderCards(translate('entry.savedModels'), state.models, (item) => renderModelCard(item, translate), translate)}
+        ${renderCards(translate('entry.savedModels'), state.models, (model) => renderModelCard(model, translate), translate)}
       `;
     case 'rules':
       return `
         ${renderRuleForm(translate)}
-        ${renderCards(translate('entry.savedRules'), state.rules, (item) => renderRuleCard(item, translate), translate)}
+        ${renderCards(translate('entry.savedRules'), state.rules, (rule) => renderRuleCard(rule, translate), translate)}
       `;
     default:
-      return '';
+      return renderQuickEntryForm(translate);
   }
+}
+
+function renderQuickEntryForm(translate) {
+  const defaultCurrency = escapeHtml(state.preferences?.targetCurrency ?? 'CNY');
+  const platformOptions = state.platforms
+    .map((platform) => `<option value="${escapeHtml(platform.name)}"></option>`)
+    .join('');
+  const modelOptions = state.models
+    .map((model) => `<option value="${escapeHtml(model.name)}"></option>`)
+    .join('');
+
+  return `
+    <section>
+      <div class="section-title">
+        <h3>${translate('quickEntry.title')}</h3>
+        <p>${translate('quickEntry.hint')}</p>
+      </div>
+      <form class="grid-form compact" id="quick-entry-form">
+        <datalist id="quick-entry-platforms">
+          ${platformOptions}
+        </datalist>
+        <datalist id="quick-entry-models">
+          ${modelOptions}
+        </datalist>
+
+        <div class="form-step span-3">
+          <span>1</span>
+          <div>
+            <strong>${translate('quickEntry.platformStep')}</strong>
+            <p>${translate('quickEntry.platformStepHint')}</p>
+          </div>
+        </div>
+        <div class="field">
+          <label for="quick-platform-name">${translate('forms.platformName')}</label>
+          <input id="quick-platform-name" name="platformName" list="quick-entry-platforms" required>
+        </div>
+        <div class="field">
+          <label for="quick-platform-currency">${translate('forms.defaultCurrency')}</label>
+          <input id="quick-platform-currency" name="platformCurrency" value="${defaultCurrency}" required>
+        </div>
+        <div class="field">
+          <label for="quick-pricing-mode">${translate('forms.pricingMode')}</label>
+          <select id="quick-pricing-mode" name="pricingMode" required>
+            <option value="direct_price_based">${translate('forms.directMode')}</option>
+            <option value="plan_credit_based">${translate('forms.creditMode')}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="quick-currency">${translate('forms.directCurrency')}</label>
+          <input id="quick-currency" name="currency" value="${defaultCurrency}">
+        </div>
+
+        <div class="form-step span-3">
+          <span>2</span>
+          <div>
+            <strong>${translate('quickEntry.planStep')}</strong>
+            <p>${translate('quickEntry.planStepHint')}</p>
+          </div>
+        </div>
+        <div class="field">
+          <label for="quick-plan-id">${translate('quickEntry.existingPlan')}</label>
+          <select id="quick-plan-id" name="planId">
+            <option value="">${translate('quickEntry.noExistingPlan')}</option>
+            ${state.plans.map((plan) => {
+              const platform = state.platforms.find((item) => item.id === plan.platformId);
+              return `<option value="${escapeHtml(plan.id)}">${escapeHtml(platform?.name ?? '')} - ${escapeHtml(plan.name)}</option>`;
+            }).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label for="quick-plan-name">${translate('forms.planName')}</label>
+          <input id="quick-plan-name" name="planName">
+        </div>
+        <div class="field">
+          <label for="quick-plan-price">${translate('forms.price')}</label>
+          <input id="quick-plan-price" name="planPrice" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-credit-amount">${translate('forms.credits')}</label>
+          <input id="quick-credit-amount" name="creditAmount" type="number" step="0.000001">
+        </div>
+
+        <div class="form-step span-3">
+          <span>3</span>
+          <div>
+            <strong>${translate('quickEntry.modelStep')}</strong>
+            <p>${translate('quickEntry.modelStepHint')}</p>
+          </div>
+        </div>
+        <div class="field">
+          <label for="quick-model-name">${translate('forms.modelName')}</label>
+          <input id="quick-model-name" name="modelName" list="quick-entry-models" required>
+        </div>
+        <div class="field">
+          <label for="quick-model-category">${translate('forms.category')}</label>
+          <select id="quick-model-category" name="modelCategory" required>
+            <option value="text">text</option>
+            <option value="image">image</option>
+            <option value="video">video</option>
+            <option value="audio">audio</option>
+          </select>
+        </div>
+
+        <div class="form-step span-3">
+          <span>4</span>
+          <div>
+            <strong>${translate('quickEntry.priceStep')}</strong>
+            <p>${translate('quickEntry.priceStepHint')}</p>
+          </div>
+        </div>
+        <div class="field">
+          <label for="quick-text-unit-size">${translate('quickEntry.textUnitSize')}</label>
+          <input id="quick-text-unit-size" name="textUnitSize" type="number" step="1" value="1000000">
+        </div>
+        <div class="field">
+          <label for="quick-text-input-price">${translate('quickEntry.textInputPrice')}</label>
+          <input id="quick-text-input-price" name="textInputPrice" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-text-output-price">${translate('quickEntry.textOutputPrice')}</label>
+          <input id="quick-text-output-price" name="textOutputPrice" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-text-cached-input-price">${translate('quickEntry.textCachedInputPrice')}</label>
+          <input id="quick-text-cached-input-price" name="textCachedInputPrice" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-text-input-credits">${translate('forms.textInputPer1k')}</label>
+          <input id="quick-text-input-credits" name="textInputCreditsPer1k" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-text-output-credits">${translate('forms.textOutputPer1k')}</label>
+          <input id="quick-text-output-credits" name="textOutputCreditsPer1k" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-text-cached-input-credits">${translate('forms.textCachedInputPer1k')}</label>
+          <input id="quick-text-cached-input-credits" name="textCachedInputCreditsPer1k" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-image-price">${translate('quickEntry.imagePrice')}</label>
+          <input id="quick-image-price" name="imagePrice" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-image-credits">${translate('forms.imagePerUnit')}</label>
+          <input id="quick-image-credits" name="imageCreditsPerUnit" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-media-price">${translate('quickEntry.mediaPrice')}</label>
+          <input id="quick-media-price" name="mediaPrice" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-media-unit-kind">${translate('quickEntry.mediaUnitKind')}</label>
+          <select id="quick-media-unit-kind" name="mediaUnitKind">
+            <option value="second">${translate('quickEntry.second')}</option>
+            <option value="minute">${translate('quickEntry.minute')}</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="quick-media-unit-size">${translate('quickEntry.mediaUnitSize')}</label>
+          <input id="quick-media-unit-size" name="mediaUnitSize" type="number" step="0.000001" value="1">
+        </div>
+        <div class="field">
+          <label for="quick-video-second-credits">${translate('forms.videoPerSecond')}</label>
+          <input id="quick-video-second-credits" name="videoCreditsPerSecond" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-video-minute-credits">${translate('forms.videoPerMinute')}</label>
+          <input id="quick-video-minute-credits" name="videoCreditsPerMinute" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-audio-second-credits">${translate('forms.audioPerSecond')}</label>
+          <input id="quick-audio-second-credits" name="audioCreditsPerSecond" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="quick-audio-minute-credits">${translate('forms.audioPerMinute')}</label>
+          <input id="quick-audio-minute-credits" name="audioCreditsPerMinute" type="number" step="0.000001">
+        </div>
+        <div class="field span-3">
+          <label for="quick-notes">${translate('forms.notes')}</label>
+          <textarea id="quick-notes" name="notes"></textarea>
+        </div>
+        <div class="conversion-preview span-3" id="quick-entry-preview">
+          <strong>${translate('quickEntry.previewTitle')}</strong>
+          <p>${translate('quickEntry.previewEmpty')}</p>
+        </div>
+        <div class="field span-3">
+          <button type="submit">${translate('quickEntry.save')}</button>
+        </div>
+      </form>
+    </section>
+  `;
 }
 
 function renderControlsTabContent(translate, locale) {
@@ -391,6 +597,10 @@ function renderRuleForm(translate) {
           <label for="text-output-value">${translate('forms.textOutputPer1k')}</label>
           <input id="text-output-value" name="textOutputCreditsPer1k" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
         </div>
+        <div class="field consumption-field" data-consumption-field="textCachedInputCreditsPer1k">
+          <label for="text-cached-input-value">${translate('forms.textCachedInputPer1k')}</label>
+          <input id="text-cached-input-value" name="textCachedInputCreditsPer1k" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
+        </div>
         <div class="field consumption-field" data-consumption-field="imageCreditsPerUnit">
           <label for="image-value">${translate('forms.imagePerUnit')}</label>
           <input id="image-value" name="imageCreditsPerUnit" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
@@ -421,6 +631,130 @@ function renderRuleForm(translate) {
         </div>
       </form>
     </section>
+  `;
+}
+
+function renderPlanFormForPlatform(platform, translate) {
+  return `
+    <form class="grid-form compact" id="plan-form">
+      <input type="hidden" name="platformId" value="${platform.id}">
+      <div class="field">
+        <label for="plan-name">${translate('forms.planName')}</label>
+        <input id="plan-name" name="name" required>
+      </div>
+      <div class="field">
+        <label for="plan-price">${translate('forms.price')}</label>
+        <input id="plan-price" name="price" type="number" step="0.01" required>
+      </div>
+      <div class="field">
+        <label for="plan-currency">${translate('forms.currency')}</label>
+        <input id="plan-currency" name="currency" value="${escapeHtml(platform.defaultCurrency)}" required>
+      </div>
+      <div class="field">
+        <label for="plan-cycle">${translate('forms.cycle')}</label>
+        <select id="plan-cycle" name="billingCycle">
+          <option value="monthly">monthly</option>
+          <option value="yearly">yearly</option>
+          <option value="one_time">one_time</option>
+          <option value="custom">custom</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="plan-credits">${translate('forms.credits')}</label>
+        <input id="plan-credits" name="creditAmount" type="number" step="0.000001">
+      </div>
+      <div class="field span-2">
+        <label for="plan-notes">${translate('forms.notes')}</label>
+        <textarea id="plan-notes" name="notes"></textarea>
+      </div>
+      <div class="field span-2">
+        <button type="submit">${translate('forms.savePlan')}</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderRuleFormForPlatform(platform, translate) {
+  return `
+    <form class="grid-form compact" id="rule-form">
+      <input type="hidden" name="platformId" value="${platform.id}">
+      <div class="form-step span-3">
+        <span>1</span>
+        <div>
+          <strong>选择模型和计费模式</strong>
+          <p>网站已锁定为 ${escapeHtml(platform.name)}，请选择模型并填写消耗。</p>
+        </div>
+      </div>
+      <div class="field">
+        <label for="rule-model-id">${translate('forms.model')}</label>
+        <select id="rule-model-id" name="modelId" required>
+          <option value="">请选择</option>
+          ${state.models.map((model) => `<option value="${model.id}">${model.name} (${model.category})</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label for="rule-mode">${translate('forms.pricingMode')}</label>
+        <select id="rule-mode" name="pricingMode" required>
+          <option value="plan_credit_based">${translate('forms.creditMode')}</option>
+          <option value="direct_price_based">${translate('forms.directMode')}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="rule-currency">${translate('forms.directCurrency')}</label>
+        <input id="rule-currency" name="currency" value="${escapeHtml(platform.defaultCurrency)}">
+      </div>
+      <div class="field">
+        <label for="rule-notes">${translate('forms.notes')}</label>
+        <input id="rule-notes" name="notes">
+      </div>
+      <div class="form-step span-3">
+        <span>2</span>
+        <div>
+          <strong>${translate('forms.consumptionTitle')}</strong>
+          <p>积分换算时填"消耗多少积分"；直接价格时填"每单位多少钱"。只填当前模型类型需要的项目。</p>
+        </div>
+      </div>
+      <div class="field consumption-field" data-consumption-field="textInputCreditsPer1k">
+        <label for="text-input-value">${translate('forms.textInputPer1k')}</label>
+        <input id="text-input-value" name="textInputCreditsPer1k" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
+      </div>
+      <div class="field consumption-field" data-consumption-field="textOutputCreditsPer1k">
+        <label for="text-output-value">${translate('forms.textOutputPer1k')}</label>
+        <input id="text-output-value" name="textOutputCreditsPer1k" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
+      </div>
+      <div class="field consumption-field" data-consumption-field="textCachedInputCreditsPer1k">
+        <label for="text-cached-input-value">${translate('forms.textCachedInputPer1k')}</label>
+        <input id="text-cached-input-value" name="textCachedInputCreditsPer1k" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
+      </div>
+      <div class="field consumption-field" data-consumption-field="imageCreditsPerUnit">
+        <label for="image-value">${translate('forms.imagePerUnit')}</label>
+        <input id="image-value" name="imageCreditsPerUnit" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
+      </div>
+      <div class="field consumption-field" data-consumption-field="videoCreditsPerSecond">
+        <label for="video-second-value">${translate('forms.videoPerSecond')}</label>
+        <input id="video-second-value" name="videoCreditsPerSecond" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
+      </div>
+      <div class="field consumption-field" data-consumption-field="videoCreditsPerMinute">
+        <label for="video-minute-value">${translate('forms.videoPerMinute')}</label>
+        <input id="video-minute-value" name="videoCreditsPerMinute" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
+      </div>
+      <div class="field consumption-field" data-consumption-field="audioCreditsPerSecond">
+        <label for="audio-second-value">${translate('forms.audioPerSecond')}</label>
+        <input id="audio-second-value" name="audioCreditsPerSecond" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
+      </div>
+      <div class="field consumption-field" data-consumption-field="audioCreditsPerMinute">
+        <label for="audio-minute-value">${translate('forms.audioPerMinute')}</label>
+        <input id="audio-minute-value" name="audioCreditsPerMinute" type="number" step="0.000001" placeholder="${translate('forms.consumptionSuffix')}">
+      </div>
+      <div class="conversion-preview span-3" id="rule-preview">
+        <strong>${translate('forms.conversionPreview')}</strong>
+        <p>${translate('forms.previewPlan')}</p>
+        <p>${translate('forms.previewUsage')}</p>
+      </div>
+      <div class="field span-3">
+        <button type="submit">${translate('forms.saveRule')}</button>
+      </div>
+    </form>
   `;
 }
 
@@ -1032,6 +1366,9 @@ window.toggleAllCheckboxes = function(type, checked) {
 };
 
 function bindEvents() {
+  document.querySelector('#quick-entry-form')?.addEventListener('submit', handleQuickEntrySubmit);
+  document.querySelector('#quick-entry-form')?.addEventListener('input', updateQuickEntryPreview);
+  document.querySelector('#quick-entry-form')?.addEventListener('change', updateQuickEntryPreview);
   document.querySelector('#platform-form')?.addEventListener('submit', handlePlatformSubmit);
   document.querySelector('#plan-form')?.addEventListener('submit', handlePlanSubmit);
   document.querySelector('#model-form')?.addEventListener('submit', handleModelSubmit);
@@ -1054,13 +1391,46 @@ function bindEvents() {
   });
   document.querySelector('#btn-fullscreen')?.addEventListener('click', openFullscreen);
   document.querySelector('#btn-close-fullscreen')?.addEventListener('click', closeFullscreen);
+  document.querySelector('#platform-selector')?.addEventListener('change', handlePlatformSelectorChange);
+  document.querySelector('#btn-add-platform')?.addEventListener('click', handleAddPlatformClick);
   updateRulePreview();
+  updateQuickEntryPreview();
   updateScenarioFieldVisibility();
 }
 
 function handleTabClick(event) {
   const button = event.currentTarget;
   tabState[button.dataset.tabGroup] = button.dataset.tabValue;
+  render();
+}
+
+function handlePlatformSelectorChange(event) {
+  tabState.selectedPlatformId = event.target.value || null;
+  render();
+}
+
+async function handleAddPlatformClick() {
+  const locale = getLocale();
+  const translate = createTranslator(locale);
+  
+  const name = prompt('请输入网站名称：');
+  if (!name || !name.trim()) return;
+  
+  const currency = prompt('请输入默认币种（如 CNY、USD）：', 'CNY');
+  if (!currency || !currency.trim()) return;
+  
+  const platform = {
+    id: createId('platform'),
+    name: name.trim(),
+    defaultCurrency: currency.trim().toUpperCase(),
+    notes: '',
+  };
+  
+  await updateState((draft) => {
+    draft.platforms.push(platform);
+  }, t('flash.platformSaved'));
+  
+  tabState.selectedPlatformId = platform.id;
   render();
 }
 
@@ -1082,6 +1452,22 @@ function closeFullscreen() {
 
 function handleRulePreviewChange() {
   updateRulePreview();
+}
+
+async function handleQuickEntrySubmit(event) {
+  event.preventDefault();
+
+  try {
+    const draft = buildQuickEntryDraftFromForm(new FormData(event.currentTarget));
+    const result = buildQuickEntryMutation({ state, draft, createId });
+    state = await repository.saveState(result.nextState);
+    comparisonRows = [];
+    setFlash('success', t('flash.quickEntrySaved'));
+    render();
+  } catch (error) {
+    setFlash('error', error instanceof Error ? error.message : t('flash.invalidUnits'));
+    render();
+  }
 }
 
 async function handlePlatformSubmit(event) {
@@ -1453,7 +1839,10 @@ function populateRuleForm(rule, translate) {
   form.querySelector('#rule-platform-id').value = rule.platformId;
   form.querySelector('#rule-model-id').value = rule.modelId;
   form.querySelector('#rule-mode').value = rule.pricingMode;
-  form.querySelector('#rule-plan-id').value = rule.planId || '';
+  const planInput = form.querySelector('#rule-plan-id');
+  if (planInput) {
+    planInput.value = rule.planId || '';
+  }
   form.querySelector('#rule-currency').value = rule.currency;
   form.querySelector('#rule-notes').value = rule.notes || '';
   
@@ -1472,6 +1861,7 @@ function getUnitInputName(unitType) {
   const mapping = {
     'per_1k_input_tokens': 'textInputCreditsPer1k',
     'per_1k_output_tokens': 'textOutputCreditsPer1k',
+    'per_1k_cached_input_tokens': 'textCachedInputCreditsPer1k',
     'per_image': 'imageCreditsPerUnit',
     'per_second': 'videoCreditsPerSecond',
     'per_minute': 'videoCreditsPerMinute',
@@ -1574,7 +1964,7 @@ async function handleLoadDemo() {
   });
   state = await repository.loadState();
   comparisonRows = [];
-  tabState.entry = 'platforms';
+  tabState.entry = 'quickEntry';
   tabState.controls = 'comparison';
   setFlash('success', t('flash.demoLoaded'));
   render();
@@ -1647,6 +2037,92 @@ function roundDisplay(value) {
   return Number(value.toFixed(6));
 }
 
+function updateQuickEntryPreview() {
+  const form = document.querySelector('#quick-entry-form');
+  const preview = document.querySelector('#quick-entry-preview');
+  if (!form || !preview) {
+    return;
+  }
+
+  try {
+    const draft = buildQuickEntryDraftFromForm(new FormData(form));
+    const errors = validateQuickEntryDraft(draft, { state });
+    if (errors.length > 0) {
+      preview.innerHTML = `
+        <strong>${t('quickEntry.previewTitle')}</strong>
+        <p>${escapeHtml(errors.join(' '))}</p>
+      `;
+      return;
+    }
+
+    preview.innerHTML = `
+      <strong>${t('quickEntry.previewTitle')}</strong>
+      <div class="preview-grid">
+        <span>${t('forms.platformName')}</span>
+        <b>${escapeHtml(draft.platformName || '-')}</b>
+        <span>${t('forms.modelName')}</span>
+        <b>${escapeHtml(draft.modelName || '-')} (${escapeHtml(draft.modelCategory || '-')})</b>
+        <span>${t('forms.pricingMode')}</span>
+        <b>${escapeHtml(getPricingModeLabel(draft.pricingMode))}</b>
+        <span>${t('quickEntry.normalizedUnits')}</span>
+        <b>${formatUnitDefinitions(draft.unitDefinitions)}</b>
+      </div>
+    `;
+  } catch (error) {
+    preview.innerHTML = `
+      <strong>${t('quickEntry.previewTitle')}</strong>
+      <p>${escapeHtml(error instanceof Error ? error.message : String(error))}</p>
+    `;
+  }
+}
+
+function buildQuickEntryDraftFromForm(formData) {
+  const values = Object.fromEntries(formData.entries());
+  const pricingMode = String(formData.get('pricingMode') || 'direct_price_based');
+  const modelCategory = String(formData.get('modelCategory') || '').trim();
+  const unitDefinitions = pricingMode === 'direct_price_based'
+    ? normalizeDirectUnitDefinitions({ category: modelCategory, values: getDirectPricingValues(values) }).unitDefinitions
+    : buildUnitDefinitions({ category: modelCategory, values });
+
+  return {
+    platformName: String(formData.get('platformName') || '').trim(),
+    platformCurrency: String(formData.get('platformCurrency') || '').trim().toUpperCase(),
+    pricingMode,
+    currency: String(formData.get('currency') || '').trim().toUpperCase(),
+    planId: String(formData.get('planId') || '').trim(),
+    planName: String(formData.get('planName') || '').trim(),
+    planPrice: String(formData.get('planPrice') || '').trim(),
+    creditAmount: String(formData.get('creditAmount') || '').trim(),
+    modelName: String(formData.get('modelName') || '').trim(),
+    modelCategory,
+    unitDefinitions,
+    notes: String(formData.get('notes') || '').trim(),
+  };
+}
+
+function getDirectPricingValues(values) {
+  return {
+    textUnitSize: values.textUnitSize,
+    textInputPrice: values.textInputPrice,
+    textOutputPrice: values.textOutputPrice,
+    textCachedInputPrice: values.textCachedInputPrice,
+    imagePrice: values.imagePrice,
+    mediaPrice: values.mediaPrice,
+    mediaUnitKind: values.mediaUnitKind,
+    mediaUnitSize: values.mediaUnitSize,
+  };
+}
+
+function formatUnitDefinitions(unitDefinitions) {
+  if (!Array.isArray(unitDefinitions) || unitDefinitions.length === 0) {
+    return '-';
+  }
+
+  return unitDefinitions
+    .map((unit) => `${escapeHtml(getUnitTypeLabel(unit.unitType))}: ${escapeHtml(unit.value)}`)
+    .join('<br>');
+}
+
 function updateRulePreview() {
   const form = document.querySelector('#rule-form');
   const preview = document.querySelector('#rule-preview');
@@ -1717,6 +2193,7 @@ function getPrimaryUsageFromForm(formData, category) {
     text: [
       ['textInputCreditsPer1k', '每 1K 输入'],
       ['textOutputCreditsPer1k', '每 1K 输出'],
+      ['textCachedInputCreditsPer1k', '每 1K 缓存输入'],
     ],
     image: [['imageCreditsPerUnit', '每张图片']],
     video: [
@@ -1770,6 +2247,7 @@ function getUnitTypeLabel(unitType) {
   const labels = {
     per_1k_input_tokens: '每 1K 输入',
     per_1k_output_tokens: '每 1K 输出',
+    per_1k_cached_input_tokens: '每 1K 缓存输入',
     per_image: '每张图片',
     per_second: '每秒',
     per_minute: '每分钟',
