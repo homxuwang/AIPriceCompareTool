@@ -1,6 +1,10 @@
 import { buildComparisonRow } from '../lib/calculation.js';
 
-export function buildUnitDefinitions({ category, values }) {
+export function buildUnitDefinitions({ pricingMode, category, values }) {
+  if (pricingMode === 'plan_output_based') {
+    return compactUnitDefinitions([[resolveOutputUnitType(category), values.includedOutputUnits]]);
+  }
+
   switch (category) {
     case 'text':
       return compactUnitDefinitions([
@@ -57,4 +61,18 @@ function compactUnitDefinitions(entries) {
       value: rawValue === '' ? null : Number(rawValue),
     }))
     .filter((entry) => entry.value != null && !Number.isNaN(entry.value));
+}
+
+function resolveOutputUnitType(category) {
+  switch (category) {
+    case 'image':
+      return 'per_image';
+    case 'video':
+      return 'per_minute';
+    case 'audio':
+      return 'per_minute';
+    case 'text':
+    default:
+      return 'per_1k_output_tokens';
+  }
 }

@@ -19,9 +19,10 @@ test('builds calculation sections with formulas for zh-CN', () => {
   assert.deepEqual(titles, [
     '汇率换算',
     '积分套餐折算',
+    '套餐产能模式',
     '单个模型单位成本',
     '文本模型单次成本',
   ]);
-  assert.match(sections[0].formula, /目标币种成本/);
-  assert.match(sections[3].example, /单次文本成本/);
+  assert.match(sections[2].formula, /套餐价格/);
+  assert.match(sections[4].example, /单次文本成本/);
 });

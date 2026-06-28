@@ -92,3 +92,29 @@ test('treats missing text output pricing as zero', () => {
 
   assert.equal(row.singleRunCost, 1.44);
 });
+
+test('builds image comparison row from plan output pricing', () => {
+  const row = buildComparisonRow({
+    platform: { name: 'Output AI' },
+    model: { name: 'gpt-image-2-1k', category: 'image' },
+    plan: { name: 'Starter', price: 19, currency: 'USD', creditAmount: null },
+    rule: {
+      pricingMode: 'plan_output_based',
+      unitDefinitions: [{ unitType: 'per_image', value: 2000 }],
+    },
+    scenario: {
+      imageCount: 3,
+      textInputTokens: 1000,
+      textOutputTokens: 500,
+      videoSeconds: 5,
+      audioMinutes: 1,
+    },
+    exchangeRates: { baseCurrency: 'CNY', rates: { CNY: 1, USD: 7.2 } },
+    targetCurrency: 'CNY',
+  });
+
+  assert.equal(row.convertedUnitCost, 0.0684);
+  assert.equal(row.singleRunCost, 0.2052);
+  assert.equal(row.includedUnits, 2000);
+  assert.equal(row.unitUsageDescription, 'per_image: 2000');
+});

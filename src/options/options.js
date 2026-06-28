@@ -344,6 +344,7 @@ function renderRuleForm(translate) {
           <label for="rule-mode">${translate('forms.pricingMode')}</label>
           <select id="rule-mode" name="pricingMode" required>
             <option value="plan_credit_based">plan_credit_based</option>
+            <option value="plan_output_based">plan_output_based</option>
             <option value="direct_price_based">direct_price_based</option>
           </select>
         </div>
@@ -357,6 +358,10 @@ function renderRuleForm(translate) {
         <div class="field">
           <label for="rule-currency">${translate('forms.directCurrency')}</label>
           <input id="rule-currency" name="currency" value="USD">
+        </div>
+        <div class="field">
+          <label for="included-output-units">${translate('forms.includedOutputUnits')}</label>
+          <input id="included-output-units" name="includedOutputUnits" type="number" step="0.000001">
         </div>
         <div class="field">
           <label for="rule-notes">${translate('forms.notes')}</label>
@@ -528,6 +533,7 @@ function renderResultsTable(translate) {
           <th>${translate('resultsTable.planName')}</th>
           <th>${translate('resultsTable.planTotalPrice')}</th>
           <th>${translate('resultsTable.totalCredits')}</th>
+          <th>${translate('resultsTable.includedUnits')}</th>
           <th>${translate('resultsTable.unitUsageDescription')}</th>
           <th>${translate('resultsTable.originalUnitCost')}</th>
           <th>${translate('resultsTable.exchangeRate')}</th>
@@ -545,6 +551,7 @@ function renderResultsTable(translate) {
             <td>${escapeHtml(row.planName || '-')}</td>
             <td>${row.planTotalPrice ?? '-'}</td>
             <td>${row.totalCredits ?? '-'}</td>
+            <td>${row.includedUnits ?? '-'}</td>
             <td>${escapeHtml(row.unitUsageDescription)}</td>
             <td>${row.originalUnitCost} ${escapeHtml(row.originalCurrency)}</td>
             <td>${row.exchangeRate}</td>
@@ -702,6 +709,7 @@ async function handleRuleSubmit(event) {
   }
 
   const unitDefinitions = buildUnitDefinitions({
+    pricingMode: String(formData.get('pricingMode')),
     category: model.category,
     values: Object.fromEntries(formData.entries()),
   });

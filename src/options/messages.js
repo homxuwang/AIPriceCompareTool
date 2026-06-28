@@ -75,8 +75,10 @@ const messages = {
       platform: '网站',
       model: '模型',
       pricingMode: '计费模式',
+      planOutputBased: '套餐产能模式',
       linkedPlan: '关联套餐',
       directCurrency: '直接价格币种',
+      includedOutputUnits: '套餐总可生成数量',
       textInputPer1k: '文本输入 / 1K',
       textOutputPer1k: '文本输出 / 1K',
       imagePerUnit: '图片 / 张',
@@ -137,6 +139,7 @@ const messages = {
       planName: 'Plan Name',
       planTotalPrice: 'Plan Total Price',
       totalCredits: 'Total Credits',
+      includedUnits: '套餐总可生成数量',
       unitUsageDescription: 'Unit Usage Description',
       originalUnitCost: 'Original Currency Unit Cost',
       exchangeRate: 'Exchange Rate',
@@ -163,10 +166,17 @@ const calculationContent = {
         '例：39 CNY ÷ 400 credits = 0.0975 CNY / credit。',
     },
     {
+      title: '套餐产能模式',
+      summary: '当平台直接给出“某套餐对某模型可以生成多少张”时，系统会把套餐价格直接除以可生成数量。',
+      formula: '单位成本 = 套餐价格 ÷ 套餐总可生成数量',
+      example:
+        '例：Starter 套餐 19 USD，对 GPT Image 2 1K 可生成 2000 张，则单位成本 = 19 ÷ 2000 = 0.0095 USD / image。',
+    },
+    {
       title: '单个模型单位成本',
       summary: '图片、视频、音频或其他单单位模型，先求标准单位成本，再进入结果表。',
       formula:
-        '积分折算模式：模型单位成本 = 每积分成本 × 该模型每单位消耗积分\n直接价格模式：模型单位成本 = 用户录入的每单位价格',
+        '积分折算模式：模型单位成本 = 每积分成本 × 该模型每单位消耗积分\n套餐产能模式：模型单位成本 = 套餐价格 ÷ 套餐总可生成数量\n直接价格模式：模型单位成本 = 用户录入的每单位价格',
       example:
         '例：如果 gpt-image-1 每张图消耗 20 credits，那么 0.0975 × 20 = 1.95 CNY / image。',
     },

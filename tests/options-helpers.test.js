@@ -18,6 +18,7 @@ test('builds image unit definitions from form values', () => {
 
 test('builds partial text unit definitions from form values', () => {
   const unitDefinitions = buildUnitDefinitions({
+    pricingMode: 'direct_price_based',
     category: 'text',
     values: {
       textInputValue: '0.1',
@@ -26,6 +27,18 @@ test('builds partial text unit definitions from form values', () => {
   });
 
   assert.deepEqual(unitDefinitions, [{ unitType: 'per_1k_input_tokens', value: 0.1 }]);
+});
+
+test('builds included output units from form values', () => {
+  const unitDefinitions = buildUnitDefinitions({
+    pricingMode: 'plan_output_based',
+    category: 'image',
+    values: {
+      includedOutputUnits: '2000',
+    },
+  });
+
+  assert.deepEqual(unitDefinitions, [{ unitType: 'per_image', value: 2000 }]);
 });
 
 test('builds comparison rows using selected platforms and models', () => {

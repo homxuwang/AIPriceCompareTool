@@ -19,14 +19,11 @@ export function buildComparisonRow({
 }) {
   const unitCosts = rule.unitDefinitions.map((unitDefinition) => {
     const sourceCurrency = plan?.currency ?? rule.currency ?? targetCurrency;
-    const originalUnitCost =
-      rule.pricingMode === 'plan_credit_based'
-        ? calculateUnitCostFromPlanCredits({
-            planPrice: plan.price,
-            creditAmount: plan.creditAmount,
-            creditsPerUnit: unitDefinition.value,
-          })
-        : roundCurrency(unitDefinition.value);
+    const originalUnitCost = resolveOriginalUnitCost({
+      plan,
+      rule,
+      unitDefinition,
+    });
 
     const convertedUnitCost = roundCurrency(
       convertCurrency({
@@ -59,6 +56,10 @@ export function buildComparisonRow({
     planName: plan?.name ?? '',
     planTotalPrice: plan?.price ?? null,
     totalCredits: plan?.creditAmount ?? null,
+    includedUnits:
+      rule.pricingMode === 'plan_output_based'
+        ? rule.unitDefinitions[0]?.value ?? null
+        : null,
     exchangeRate:
       exchangeRates.rates[unitCosts[0]?.sourceCurrency ?? targetCurrency] /
       exchangeRates.rates[targetCurrency],
@@ -71,6 +72,22 @@ export function buildComparisonRow({
     singleRunCost,
     unitCosts,
   };
+}
+
+function resolveOriginalUnitCost({ plan, rule, unitDefinition }) {
+  if (rule.pricingMode === 'plan_credit_based') {
+    return calculateUnitCostFromPlanCredits({
+      planPrice: plan.price,
+      creditAmount: plan.creditAmount,
+      creditsPerUnit: unitDefinition.value,
+    });
+  }
+
+  if (rule.pricingMode === 'plan_output_based') {
+    return roundCurrency(plan.price / unitDefinition.value);
+  }
+
+  return roundCurrency(unitDefinition.value);
 }
 
 function getScenarioMultiplier(unitType, category, scenario) {
