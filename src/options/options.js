@@ -10,9 +10,11 @@ import {
 import {
   buildComparisonRows,
   buildUnitDefinitions,
+  formatTokenCountAsMillions,
   getVisibleQuickEntryPriceFieldNames,
   getVisibleScenarioFieldCategories,
   getVisibleConsumptionFieldNames,
+  parseMillionTokenInput,
 } from './helpers.js';
 import {
   buildQuickEntryMutation,
@@ -790,11 +792,11 @@ function renderSettingsForm(translate) {
       </div>
       <div class="field">
         <label for="scenario-input">${translate('forms.defaultTextInput')}</label>
-        <input id="scenario-input" name="textInputTokens" type="number" step="1" value="${state.scenarioDefaults.textInputTokens ?? DEFAULT_SCENARIO.textInputTokens}">
+        <input id="scenario-input" name="textInputTokens" type="number" step="0.000001" value="${formatTokenCountAsMillions(state.scenarioDefaults.textInputTokens ?? DEFAULT_SCENARIO.textInputTokens)}">
       </div>
       <div class="field">
         <label for="scenario-output">${translate('forms.defaultTextOutput')}</label>
-        <input id="scenario-output" name="textOutputTokens" type="number" step="1" value="${state.scenarioDefaults.textOutputTokens ?? DEFAULT_SCENARIO.textOutputTokens}">
+        <input id="scenario-output" name="textOutputTokens" type="number" step="0.000001" value="${formatTokenCountAsMillions(state.scenarioDefaults.textOutputTokens ?? DEFAULT_SCENARIO.textOutputTokens)}">
       </div>
       <div class="field">
         <label for="scenario-images">${translate('forms.defaultImageCount')}</label>
@@ -867,11 +869,11 @@ function renderComparisonForm(translate) {
 
       <div class="field scenario-field" data-category="text">
         <label for="compare-input">${translate('forms.runtimeTextInput')}</label>
-        <input id="compare-input" name="textInputTokens" type="number" step="1" value="${state.scenarioDefaults.textInputTokens}">
+        <input id="compare-input" name="textInputTokens" type="number" step="0.000001" value="${formatTokenCountAsMillions(state.scenarioDefaults.textInputTokens)}">
       </div>
       <div class="field scenario-field" data-category="text">
         <label for="compare-output">${translate('forms.runtimeTextOutput')}</label>
-        <input id="compare-output" name="textOutputTokens" type="number" step="1" value="${state.scenarioDefaults.textOutputTokens}">
+        <input id="compare-output" name="textOutputTokens" type="number" step="0.000001" value="${formatTokenCountAsMillions(state.scenarioDefaults.textOutputTokens)}">
       </div>
       <div class="field scenario-field" data-category="image">
         <label for="compare-images">${translate('forms.runtimeImageCount')}</label>
@@ -1683,8 +1685,8 @@ async function handleSettingsSubmit(event) {
       updatedAt: new Date().toISOString(),
     };
     draft.scenarioDefaults = {
-      textInputTokens: Number(formData.get('textInputTokens')),
-      textOutputTokens: Number(formData.get('textOutputTokens')),
+      textInputTokens: parseMillionTokenInput(formData.get('textInputTokens')),
+      textOutputTokens: parseMillionTokenInput(formData.get('textOutputTokens')),
       imageCount: Number(formData.get('imageCount')),
       videoSeconds: Number(formData.get('videoSeconds')),
       audioMinutes: Number(formData.get('audioMinutes')),
@@ -1710,8 +1712,8 @@ function handleComparisonSubmit(event) {
     comparisonMode,
     targetCurrency: state.preferences?.targetCurrency ?? 'CNY',
     scenario: {
-      textInputTokens: Number(formData.get('textInputTokens')),
-      textOutputTokens: Number(formData.get('textOutputTokens')),
+      textInputTokens: parseMillionTokenInput(formData.get('textInputTokens'), state.scenarioDefaults.textInputTokens),
+      textOutputTokens: parseMillionTokenInput(formData.get('textOutputTokens'), state.scenarioDefaults.textOutputTokens),
       imageCount: Number(formData.get('imageCount')),
       videoSeconds: Number(formData.get('videoSeconds')),
       audioMinutes: audioSeconds / 60,
@@ -2006,8 +2008,8 @@ function getScenarioFromForm() {
   const formData = new FormData(form);
   const audioSeconds = Number(formData.get('audioMinutes')) || 0;
   return {
-    textInputTokens: Number(formData.get('textInputTokens')) || state.scenarioDefaults.textInputTokens,
-    textOutputTokens: Number(formData.get('textOutputTokens')) || state.scenarioDefaults.textOutputTokens,
+    textInputTokens: parseMillionTokenInput(formData.get('textInputTokens'), state.scenarioDefaults.textInputTokens),
+    textOutputTokens: parseMillionTokenInput(formData.get('textOutputTokens'), state.scenarioDefaults.textOutputTokens),
     imageCount: Number(formData.get('imageCount')) || state.scenarioDefaults.imageCount,
     videoSeconds: Number(formData.get('videoSeconds')) || state.scenarioDefaults.videoSeconds,
     audioMinutes: audioSeconds / 60,

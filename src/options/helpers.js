@@ -14,6 +14,8 @@ const directPriceFieldsByCategory = {
   audio: ['mediaPrice', 'mediaUnitKind', 'mediaUnitSize'],
 };
 
+const TOKENS_PER_MILLION = 1000000;
+
 export function buildUnitDefinitions({ category, values }) {
   switch (category) {
     case 'text':
@@ -59,6 +61,20 @@ export function getVisibleScenarioFieldCategories(categories) {
   return Array.from(new Set(categories)).filter((category) =>
     Object.hasOwn(consumptionFieldsByCategory, category),
   );
+}
+
+export function formatTokenCountAsMillions(tokenCount) {
+  const value = Number(tokenCount);
+  return Number.isFinite(value) ? value / TOKENS_PER_MILLION : 0;
+}
+
+export function parseMillionTokenInput(rawValue, fallback = 0) {
+  if (rawValue === '' || rawValue == null) {
+    return fallback;
+  }
+
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value * TOKENS_PER_MILLION : fallback;
 }
 
 export function buildComparisonRows({ state, filters }) {

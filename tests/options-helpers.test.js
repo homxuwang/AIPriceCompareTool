@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   buildComparisonRows,
   buildUnitDefinitions,
+  formatTokenCountAsMillions,
   getVisibleQuickEntryPriceFieldNames,
   getVisibleScenarioFieldCategories,
   getVisibleConsumptionFieldNames,
+  parseMillionTokenInput,
 } from '../src/options/helpers.js';
 
 test('builds image unit definitions from form values', () => {
@@ -97,6 +99,17 @@ test('scenario fields stay hidden until comparison model categories are selected
   assert.deepEqual(getVisibleScenarioFieldCategories([]), []);
   assert.deepEqual(getVisibleScenarioFieldCategories(['video']), ['video']);
   assert.deepEqual(getVisibleScenarioFieldCategories(['text', 'image']), ['text', 'image']);
+});
+
+test('formats stored text token counts as million-token form values', () => {
+  assert.equal(formatTokenCountAsMillions(1000000), 1);
+  assert.equal(formatTokenCountAsMillions(500000), 0.5);
+});
+
+test('parses million-token form values back to raw token counts', () => {
+  assert.equal(parseMillionTokenInput('1'), 1000000);
+  assert.equal(parseMillionTokenInput('0.5'), 500000);
+  assert.equal(parseMillionTokenInput('', 250000), 250000);
 });
 
 test('builds comparison rows using selected platforms and models', () => {

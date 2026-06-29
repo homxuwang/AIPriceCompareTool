@@ -1,6 +1,6 @@
 export const DEFAULT_SCENARIO = {
-  textInputTokens: 1000,
-  textOutputTokens: 500,
+  textInputTokens: 1000000,
+  textOutputTokens: 1000000,
   imageCount: 1,
   videoSeconds: 5,
   audioMinutes: 1,
