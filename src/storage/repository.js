@@ -22,7 +22,7 @@ export function createEmptyState() {
 }
 
 export function createInMemoryRepository(initialState = createEmptyState()) {
-  let state = structuredClone(initialState);
+  let state = normalizeState(initialState);
 
   return {
     async loadState() {
@@ -63,8 +63,32 @@ export function createChromeStorageRepository(storageArea = chrome.storage.local
 }
 
 function normalizeState(nextState) {
-  return {
+  const normalized = {
     ...createEmptyState(),
     ...structuredClone(nextState),
+    scenarioDefaults: {
+      ...DEFAULT_SCENARIO,
+      ...(nextState?.scenarioDefaults ?? {}),
+    },
   };
+  normalized.scenarioDefaults = normalizeScenarioDefaults(normalized.scenarioDefaults);
+  return normalized;
+}
+
+function normalizeScenarioDefaults(scenarioDefaults) {
+  return {
+    ...scenarioDefaults,
+    textInputTokens: migrateLegacyDefaultTokens(
+      scenarioDefaults.textInputTokens,
+      1000,
+    ),
+    textOutputTokens: migrateLegacyDefaultTokens(
+      scenarioDefaults.textOutputTokens,
+      500,
+    ),
+  };
+}
+
+function migrateLegacyDefaultTokens(value, legacyDefault) {
+  return Number(value) === legacyDefault ? 1000000 : value;
 }
