@@ -33,7 +33,10 @@ export function normalizeDirectUnitDefinitions({ category, values }) {
 
 function normalizeTextUnitDefinitions(values) {
   const unitSize = parseUnitSize(values.textUnitSize ?? DEFAULT_TEXT_UNIT_SIZE);
-  const factor = 1000 / unitSize;
+  const normalizedUnitSize = values.textUnitScale === 'million_tokens'
+    ? unitSize * DEFAULT_TEXT_UNIT_SIZE
+    : unitSize;
+  const factor = 1000 / normalizedUnitSize;
   const normalizedFromPrices = TEXT_PRICE_FIELDS
     .map(([fieldName, unitType]) => {
       const value = parseOptionalNumber(values[fieldName]);
@@ -49,7 +52,7 @@ function normalizeTextUnitDefinitions(values) {
     .filter(Boolean);
 
   return {
-    originalUnit: { kind: 'tokens', unitSize },
+    originalUnit: { kind: 'tokens', unitSize: normalizedUnitSize },
     unitDefinitions: [
       ...normalizedFromPrices,
       ...TEXT_PER_1K_FIELDS

@@ -334,7 +334,7 @@ function renderQuickEntryForm(translate) {
         </div>
         <div class="field" data-quick-price-field="textUnitSize">
           <label for="quick-text-unit-size">${translate('quickEntry.textUnitSize')}</label>
-          <input id="quick-text-unit-size" name="textUnitSize" type="number" step="1" value="1000000">
+          <input id="quick-text-unit-size" name="textUnitSize" type="number" step="0.000001" value="1">
         </div>
         <div class="field" data-quick-price-field="textInputPrice">
           <label for="quick-text-input-price">${translate('quickEntry.textInputPrice')}</label>
@@ -2148,6 +2148,7 @@ function buildQuickEntryDraftFromForm(formData) {
 function getDirectPricingValues(values) {
   return {
     textUnitSize: values.textUnitSize,
+    textUnitScale: 'million_tokens',
     textInputPrice: values.textInputPrice,
     textOutputPrice: values.textOutputPrice,
     textCachedInputPrice: values.textCachedInputPrice,

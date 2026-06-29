@@ -24,6 +24,26 @@ test('normalizes text prices from one million tokens to one thousand tokens', ()
   });
 });
 
+test('normalizes text prices from one million-token unit value', () => {
+  const result = normalizeDirectUnitDefinitions({
+    category: 'text',
+    values: {
+      textInputPrice: '0.9',
+      textOutputPrice: '4.5',
+      textUnitSize: '1',
+      textUnitScale: 'million_tokens',
+    },
+  });
+
+  assert.deepEqual(result, {
+    originalUnit: { kind: 'tokens', unitSize: 1000000 },
+    unitDefinitions: [
+      { unitType: 'per_1k_input_tokens', value: 0.0009 },
+      { unitType: 'per_1k_output_tokens', value: 0.0045 },
+    ],
+  });
+});
+
 test('normalizes text prices from custom token unit size', () => {
   const result = normalizeDirectUnitDefinitions({
     category: 'text',
