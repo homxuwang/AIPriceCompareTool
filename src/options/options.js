@@ -10,6 +10,8 @@ import {
 import {
   buildComparisonRows,
   buildUnitDefinitions,
+  getVisibleQuickEntryPriceFieldNames,
+  getVisibleScenarioFieldCategories,
   getVisibleConsumptionFieldNames,
 } from './helpers.js';
 import {
@@ -265,7 +267,7 @@ function renderQuickEntryForm(translate) {
             <option value="plan_credit_based">${translate('forms.creditMode')}</option>
           </select>
         </div>
-        <div class="field">
+        <div class="field" data-quick-pricing-field="direct_price_based">
           <label for="quick-currency">${translate('forms.directCurrency')}</label>
           <input id="quick-currency" name="currency" value="${defaultCurrency}">
         </div>
@@ -277,7 +279,7 @@ function renderQuickEntryForm(translate) {
             <p>${translate('quickEntry.planStepHint')}</p>
           </div>
         </div>
-        <div class="field">
+        <div class="field" data-quick-pricing-field="plan_credit_based">
           <label for="quick-plan-id">${translate('quickEntry.existingPlan')}</label>
           <select id="quick-plan-id" name="planId">
             <option value="">${translate('quickEntry.noExistingPlan')}</option>
@@ -287,15 +289,15 @@ function renderQuickEntryForm(translate) {
             }).join('')}
           </select>
         </div>
-        <div class="field">
+        <div class="field" data-quick-pricing-field="plan_credit_based">
           <label for="quick-plan-name">${translate('forms.planName')}</label>
           <input id="quick-plan-name" name="planName">
         </div>
-        <div class="field">
+        <div class="field" data-quick-pricing-field="plan_credit_based">
           <label for="quick-plan-price">${translate('forms.price')}</label>
           <input id="quick-plan-price" name="planPrice" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-pricing-field="plan_credit_based">
           <label for="quick-credit-amount">${translate('forms.credits')}</label>
           <input id="quick-credit-amount" name="creditAmount" type="number" step="0.000001">
         </div>
@@ -328,70 +330,70 @@ function renderQuickEntryForm(translate) {
             <p>${translate('quickEntry.priceStepHint')}</p>
           </div>
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="textUnitSize">
           <label for="quick-text-unit-size">${translate('quickEntry.textUnitSize')}</label>
           <input id="quick-text-unit-size" name="textUnitSize" type="number" step="1" value="1000000">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="textInputPrice">
           <label for="quick-text-input-price">${translate('quickEntry.textInputPrice')}</label>
           <input id="quick-text-input-price" name="textInputPrice" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="textOutputPrice">
           <label for="quick-text-output-price">${translate('quickEntry.textOutputPrice')}</label>
           <input id="quick-text-output-price" name="textOutputPrice" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="textCachedInputPrice">
           <label for="quick-text-cached-input-price">${translate('quickEntry.textCachedInputPrice')}</label>
           <input id="quick-text-cached-input-price" name="textCachedInputPrice" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="textInputCreditsPer1k">
           <label for="quick-text-input-credits">${translate('forms.textInputPer1k')}</label>
           <input id="quick-text-input-credits" name="textInputCreditsPer1k" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="textOutputCreditsPer1k">
           <label for="quick-text-output-credits">${translate('forms.textOutputPer1k')}</label>
           <input id="quick-text-output-credits" name="textOutputCreditsPer1k" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="textCachedInputCreditsPer1k">
           <label for="quick-text-cached-input-credits">${translate('forms.textCachedInputPer1k')}</label>
           <input id="quick-text-cached-input-credits" name="textCachedInputCreditsPer1k" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="imagePrice">
           <label for="quick-image-price">${translate('quickEntry.imagePrice')}</label>
           <input id="quick-image-price" name="imagePrice" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="imageCreditsPerUnit">
           <label for="quick-image-credits">${translate('forms.imagePerUnit')}</label>
           <input id="quick-image-credits" name="imageCreditsPerUnit" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="mediaPrice">
           <label for="quick-media-price">${translate('quickEntry.mediaPrice')}</label>
           <input id="quick-media-price" name="mediaPrice" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="mediaUnitKind">
           <label for="quick-media-unit-kind">${translate('quickEntry.mediaUnitKind')}</label>
           <select id="quick-media-unit-kind" name="mediaUnitKind">
             <option value="second">${translate('quickEntry.second')}</option>
             <option value="minute">${translate('quickEntry.minute')}</option>
           </select>
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="mediaUnitSize">
           <label for="quick-media-unit-size">${translate('quickEntry.mediaUnitSize')}</label>
           <input id="quick-media-unit-size" name="mediaUnitSize" type="number" step="0.000001" value="1">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="videoCreditsPerSecond">
           <label for="quick-video-second-credits">${translate('forms.videoPerSecond')}</label>
           <input id="quick-video-second-credits" name="videoCreditsPerSecond" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="videoCreditsPerMinute">
           <label for="quick-video-minute-credits">${translate('forms.videoPerMinute')}</label>
           <input id="quick-video-minute-credits" name="videoCreditsPerMinute" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="audioCreditsPerSecond">
           <label for="quick-audio-second-credits">${translate('forms.audioPerSecond')}</label>
           <input id="quick-audio-second-credits" name="audioCreditsPerSecond" type="number" step="0.000001">
         </div>
-        <div class="field">
+        <div class="field" data-quick-price-field="audioCreditsPerMinute">
           <label for="quick-audio-minute-credits">${translate('forms.audioPerMinute')}</label>
           <input id="quick-audio-minute-credits" name="audioCreditsPerMinute" type="number" step="0.000001">
         </div>
@@ -578,7 +580,7 @@ function renderRuleForm(translate) {
             <option value="direct_price_based">${translate('forms.directMode')}</option>
           </select>
         </div>
-        <div class="field">
+        <div class="field" data-rule-pricing-field="direct_price_based">
           <label for="rule-currency">${translate('forms.directCurrency')}</label>
           <input id="rule-currency" name="currency" value="USD">
         </div>
@@ -703,7 +705,7 @@ function renderRuleFormForPlatform(platform, translate) {
           <option value="direct_price_based">${translate('forms.directMode')}</option>
         </select>
       </div>
-      <div class="field">
+      <div class="field" data-rule-pricing-field="direct_price_based">
         <label for="rule-currency">${translate('forms.directCurrency')}</label>
         <input id="rule-currency" name="currency" value="${escapeHtml(platform.defaultCurrency)}">
       </div>
@@ -1367,6 +1369,7 @@ window.toggleAllCheckboxes = function(type, checked) {
       cb.checked = checked;
     });
   }
+  updateScenarioFieldVisibility();
 };
 
 function bindEvents() {
@@ -1905,20 +1908,21 @@ async function deleteRule(id) {
 
 function updateScenarioFieldVisibility() {
   const checkboxes = document.querySelectorAll('.compare-checkbox[data-type="model"]');
-  const selectedCategories = new Set();
+  const selectedCategories = [];
   checkboxes.forEach((cb) => {
     if (cb.checked) {
-      selectedCategories.add(cb.dataset.category);
+      selectedCategories.push(cb.dataset.category);
     }
   });
 
+  const visibleCategories = new Set(getVisibleScenarioFieldCategories(selectedCategories));
   document.querySelectorAll('.scenario-field').forEach((field) => {
     const fieldCategory = field.dataset.category;
-    if (selectedCategories.size === 0) {
-      field.style.display = '';
-    } else {
-      field.style.display = selectedCategories.has(fieldCategory) ? '' : 'none';
-    }
+    const shouldShow = visibleCategories.has(fieldCategory);
+    field.hidden = !shouldShow;
+    field.querySelectorAll('input').forEach((input) => {
+      input.disabled = !shouldShow;
+    });
   });
 }
 
@@ -2052,6 +2056,7 @@ function updateQuickEntryPreview() {
   }
 
   try {
+    updateQuickEntryFieldVisibility(form);
     const draft = buildQuickEntryDraftFromForm(new FormData(form));
     const errors = validateQuickEntryDraft(draft, { state });
     if (errors.length > 0) {
@@ -2081,6 +2086,37 @@ function updateQuickEntryPreview() {
       <p>${escapeHtml(error instanceof Error ? error.message : String(error))}</p>
     `;
   }
+}
+
+function updateQuickEntryFieldVisibility(form) {
+  const formData = new FormData(form);
+  const pricingMode = String(formData.get('pricingMode') || 'direct_price_based');
+  const category = String(formData.get('modelCategory') || 'text');
+  const visiblePriceFields = new Set(getVisibleQuickEntryPriceFieldNames(category, pricingMode));
+
+  form.querySelectorAll('[data-quick-pricing-field]').forEach((field) => {
+    const shouldShow = field.dataset.quickPricingField === pricingMode;
+    setFieldVisibility(field, shouldShow, { clearHiddenValues: false });
+  });
+
+  form.querySelectorAll('[data-quick-price-field]').forEach((field) => {
+    const shouldShow = visiblePriceFields.has(field.dataset.quickPriceField);
+    setFieldVisibility(field, shouldShow, { clearHiddenValues: true });
+  });
+}
+
+function setFieldVisibility(field, shouldShow, options = {}) {
+  field.hidden = !shouldShow;
+  field.querySelectorAll('input, select, textarea').forEach((control) => {
+    control.disabled = !shouldShow;
+    if (!shouldShow && options.clearHiddenValues && control.type !== 'hidden') {
+      if (control.tagName === 'SELECT') {
+        control.selectedIndex = 0;
+      } else {
+        control.value = control.defaultValue || '';
+      }
+    }
+  });
 }
 
 function buildQuickEntryDraftFromForm(formData) {
@@ -2137,11 +2173,13 @@ function updateRulePreview() {
     return;
   }
 
-  const formData = new FormData(form);
+  let formData = new FormData(form);
   const pricingMode = String(formData.get('pricingMode'));
-  const plan = state.plans.find((item) => item.id === String(formData.get('planId')));
   const model = state.models.find((item) => item.id === String(formData.get('modelId')));
+  updateRulePricingFieldVisibility(form, pricingMode);
   updateConsumptionFieldVisibility(model?.category);
+  formData = new FormData(form);
+  const plan = state.plans.find((item) => item.id === String(formData.get('planId')));
   const usage = getPrimaryUsageFromForm(formData, model?.category);
   const targetCurrency = state.preferences?.targetCurrency ?? 'CNY';
 
@@ -2181,16 +2219,20 @@ function updateRulePreview() {
   `;
 }
 
+function updateRulePricingFieldVisibility(form, pricingMode) {
+  form.querySelectorAll('[data-rule-pricing-field]').forEach((field) => {
+    setFieldVisibility(field, field.dataset.rulePricingField === pricingMode, {
+      clearHiddenValues: false,
+    });
+  });
+}
+
 function updateConsumptionFieldVisibility(category) {
   const visibleFields = new Set(getVisibleConsumptionFieldNames(category));
   document.querySelectorAll('[data-consumption-field]').forEach((field) => {
     const shouldShow = visibleFields.has(field.dataset.consumptionField);
-    field.hidden = !shouldShow;
-    field.querySelectorAll('input').forEach((input) => {
-      input.disabled = !shouldShow;
-      if (!shouldShow) {
-        input.value = '';
-      }
+    setFieldVisibility(field, shouldShow, {
+      clearHiddenValues: true,
     });
   });
 }

@@ -7,6 +7,13 @@ const consumptionFieldsByCategory = {
   audio: ['audioCreditsPerSecond', 'audioCreditsPerMinute'],
 };
 
+const directPriceFieldsByCategory = {
+  text: ['textUnitSize', 'textInputPrice', 'textOutputPrice', 'textCachedInputPrice'],
+  image: ['imagePrice'],
+  video: ['mediaPrice', 'mediaUnitKind', 'mediaUnitSize'],
+  audio: ['mediaPrice', 'mediaUnitKind', 'mediaUnitSize'],
+};
+
 export function buildUnitDefinitions({ category, values }) {
   switch (category) {
     case 'text':
@@ -34,6 +41,24 @@ export function buildUnitDefinitions({ category, values }) {
 
 export function getVisibleConsumptionFieldNames(category) {
   return consumptionFieldsByCategory[category] ?? [];
+}
+
+export function getVisibleQuickEntryPriceFieldNames(category, pricingMode) {
+  if (pricingMode === 'direct_price_based') {
+    return directPriceFieldsByCategory[category] ?? [];
+  }
+
+  if (pricingMode === 'plan_credit_based') {
+    return getVisibleConsumptionFieldNames(category);
+  }
+
+  return [];
+}
+
+export function getVisibleScenarioFieldCategories(categories) {
+  return Array.from(new Set(categories)).filter((category) =>
+    Object.hasOwn(consumptionFieldsByCategory, category),
+  );
 }
 
 export function buildComparisonRows({ state, filters }) {

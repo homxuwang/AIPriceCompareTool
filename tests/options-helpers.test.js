@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   buildComparisonRows,
   buildUnitDefinitions,
+  getVisibleQuickEntryPriceFieldNames,
+  getVisibleScenarioFieldCategories,
   getVisibleConsumptionFieldNames,
 } from '../src/options/helpers.js';
 
@@ -75,6 +77,26 @@ test('builds cached-input text unit definitions from guided per-1k consumption f
   assert.deepEqual(unitDefinitions, [
     { unitType: 'per_1k_cached_input_tokens', value: 0.00009 },
   ]);
+});
+
+test('shows only direct text price fields in quick entry after choosing text direct pricing', () => {
+  assert.deepEqual(
+    getVisibleQuickEntryPriceFieldNames('text', 'direct_price_based'),
+    ['textUnitSize', 'textInputPrice', 'textOutputPrice', 'textCachedInputPrice'],
+  );
+});
+
+test('shows only image credit field in quick entry after choosing image credit pricing', () => {
+  assert.deepEqual(
+    getVisibleQuickEntryPriceFieldNames('image', 'plan_credit_based'),
+    ['imageCreditsPerUnit'],
+  );
+});
+
+test('scenario fields stay hidden until comparison model categories are selected', () => {
+  assert.deepEqual(getVisibleScenarioFieldCategories([]), []);
+  assert.deepEqual(getVisibleScenarioFieldCategories(['video']), ['video']);
+  assert.deepEqual(getVisibleScenarioFieldCategories(['text', 'image']), ['text', 'image']);
 });
 
 test('builds comparison rows using selected platforms and models', () => {
