@@ -44,6 +44,8 @@ const messages = {
       exchangeRateStatus: '汇率状态',
       configured: '已配置',
       unconfigured: '未配置',
+      downloadMd: '下载 MD',
+      downloadCsv: '下载 CSV',
       empty: '还没有结果。先录入网站、套餐、模型和规则，再在第二列生成对比表。',
     },
     forms: {
@@ -124,6 +126,8 @@ const messages = {
       ruleSaved: '规则已保存',
       settingsSaved: '整体参数已保存',
       exportDone: 'JSON 已导出。',
+      downloadMdDone: 'MD 已下载。',
+      downloadCsvDone: 'CSV 已下载。',
       importDone: 'JSON 已导入。',
       importFailed: 'JSON 导入失败。',
       generateFailed: '生成结果失败。',

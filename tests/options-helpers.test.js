@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   buildComparisonRows,
   buildUnitDefinitions,
+  formatComparisonRowsAsCsv,
+  formatComparisonRowsAsMarkdown,
 } from '../src/options/helpers.js';
 
 test('builds image unit definitions from form values', () => {
@@ -73,4 +75,61 @@ test('builds comparison rows using selected platforms and models', () => {
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].singleRunCost, 1.95);
+});
+
+test('formats comparison rows as csv with escaped values', () => {
+  const csv = formatComparisonRowsAsCsv([{
+    platformName: 'Foo, AI',
+    modelName: 'gpt-image-1',
+    category: 'image',
+    pricingMode: 'plan_credit_based',
+    planName: 'Pro "Plus"',
+    planTotalPrice: 39,
+    totalCredits: 400,
+    includedUnits: null,
+    unitUsageDescription: '20 credits / image',
+    originalUnitCost: 1.95,
+    originalCurrency: 'CNY',
+    exchangeRate: 1,
+    convertedUnitCost: 1.95,
+    singleRunCost: 1.95,
+  }]);
+
+  assert.equal(
+    csv,
+    [
+      'Platform,Model,Category,Pricing Mode,Plan Name,Plan Total Price,Total Credits,套餐总可生成数量,Unit Usage Description,Original Currency Unit Cost,Exchange Rate,Converted Unit Cost,Typical Single-Run Cost',
+      '"Foo, AI",gpt-image-1,image,plan_credit_based,"Pro ""Plus""",39,400,,20 credits / image,1.95 CNY,1,1.95,1.95',
+    ].join('\n'),
+  );
+});
+
+test('formats comparison rows as markdown table', () => {
+  const markdown = formatComparisonRowsAsMarkdown([{
+    platformName: 'Foo AI',
+    modelName: 'gpt-image-1',
+    category: 'image',
+    pricingMode: 'plan_credit_based',
+    planName: 'Pro',
+    planTotalPrice: 39,
+    totalCredits: 400,
+    includedUnits: null,
+    unitUsageDescription: '20 credits | image',
+    originalUnitCost: 1.95,
+    originalCurrency: 'CNY',
+    exchangeRate: 1,
+    convertedUnitCost: 1.95,
+    singleRunCost: 1.95,
+  }]);
+
+  assert.equal(
+    markdown,
+    [
+      '# AI SaaS Price Comparison Results',
+      '',
+      '| Platform | Model | Category | Pricing Mode | Plan Name | Plan Total Price | Total Credits | 套餐总可生成数量 | Unit Usage Description | Original Currency Unit Cost | Exchange Rate | Converted Unit Cost | Typical Single-Run Cost |',
+      '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+      '| Foo AI | gpt-image-1 | image | plan_credit_based | Pro | 39 | 400 |  | 20 credits \\| image | 1.95 CNY | 1 | 1.95 | 1.95 |',
+    ].join('\n'),
+  );
 });

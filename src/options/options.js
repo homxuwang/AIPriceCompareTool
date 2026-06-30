@@ -10,6 +10,8 @@ import {
 import {
   buildComparisonRows,
   buildUnitDefinitions,
+  formatComparisonRowsAsCsv,
+  formatComparisonRowsAsMarkdown,
 } from './helpers.js';
 import {
   buildCalculationSections,
@@ -117,6 +119,10 @@ function render() {
               <strong>${state.exchangeRates.updatedAt ? t('results.configured') : t('results.unconfigured')}</strong>
               <span>${t('results.exchangeRateStatus')}</span>
             </div>
+          </div>
+          <div class="result-actions">
+            <button id="download-results-md" type="button">${t('results.downloadMd')}</button>
+            <button class="button-secondary" id="download-results-csv" type="button">${t('results.downloadCsv')}</button>
           </div>
           <div class="table-wrap">
             ${renderResultsTable(t)}
@@ -635,6 +641,8 @@ function bindEvents() {
   document.querySelector('#settings-form')?.addEventListener('submit', handleSettingsSubmit);
   document.querySelector('#comparison-form')?.addEventListener('submit', handleComparisonSubmit);
   document.querySelector('#export-json')?.addEventListener('click', handleExport);
+  document.querySelector('#download-results-md')?.addEventListener('click', handleDownloadMarkdown);
+  document.querySelector('#download-results-csv')?.addEventListener('click', handleDownloadCsv);
   document.querySelector('#import-json')?.addEventListener('change', handleImport);
   document.querySelector('#reset-demo')?.addEventListener('click', handleLoadDemo);
   document.querySelectorAll('[data-tab-group]').forEach((button) => {
@@ -794,16 +802,42 @@ function handleComparisonSubmit(event) {
 }
 
 function handleExport() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], {
+  downloadFile({
+    content: JSON.stringify(state, null, 2),
     type: 'application/json',
+    filename: 'ai-saas-price-compare.json',
   });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = 'ai-saas-price-compare.json';
-  link.click();
-  URL.revokeObjectURL(link.href);
   setFlash('success', t('flash.exportDone'));
   render();
+}
+
+function handleDownloadMarkdown() {
+  downloadFile({
+    content: formatComparisonRowsAsMarkdown(comparisonRows),
+    type: 'text/markdown;charset=utf-8',
+    filename: 'ai-saas-price-comparison-results.md',
+  });
+  setFlash('success', t('flash.downloadMdDone'));
+  render();
+}
+
+function handleDownloadCsv() {
+  downloadFile({
+    content: formatComparisonRowsAsCsv(comparisonRows),
+    type: 'text/csv;charset=utf-8',
+    filename: 'ai-saas-price-comparison-results.csv',
+  });
+  setFlash('success', t('flash.downloadCsvDone'));
+  render();
+}
+
+function downloadFile({ content, type, filename }) {
+  const blob = new Blob([content], { type });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 async function handleImport(event) {
