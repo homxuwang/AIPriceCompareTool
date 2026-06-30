@@ -3,8 +3,16 @@ import assert from 'node:assert/strict';
 import {
   buildComparisonRows,
   buildUnitDefinitions,
-  formatComparisonRowsAsCsv,
-  formatComparisonRowsAsMarkdown,
+  filterAndPaginateRules,
+  filterAndPaginateSavedItems,
+  formatTokenCountAsMillions,
+  getVisibleQuickEntryPriceFieldNames,
+  getVisibleScenarioFieldCategories,
+  getVisibleConsumptionFieldNames,
+  parseMillionTokenInput,
+  resolveGuideActionTarget,
+  resolveRememberedPlatformId,
+  shouldAutoOpenFullscreen,
 } from '../src/options/helpers.js';
 
 test('builds image unit definitions from form values', () => {
@@ -18,9 +26,169 @@ test('builds image unit definitions from form values', () => {
   assert.deepEqual(unitDefinitions, [{ unitType: 'per_image', value: 20 }]);
 });
 
+test('builds image unit definitions from guided credit consumption fields', () => {
+  const unitDefinitions = buildUnitDefinitions({
+    category: 'image',
+    values: {
+      imageCreditsPerUnit: '20',
+    },
+  });
+
+  assert.deepEqual(unitDefinitions, [{ unitType: 'per_image', value: 20 }]);
+});
+
+test('shows only image consumption fields for image models', () => {
+  assert.deepEqual(getVisibleConsumptionFieldNames('image'), ['imageCreditsPerUnit']);
+});
+
+test('resolves remembered platform id only when the platform still exists', () => {
+  const platforms = [
+    { id: 'p1', name: 'First AI' },
+    { id: 'p2', name: 'Second AI' },
+  ];
+
+  assert.equal(resolveRememberedPlatformId(platforms, 'p2'), 'p2');
+  assert.equal(resolveRememberedPlatformId(platforms, 'missing'), '');
+  assert.equal(resolveRememberedPlatformId(platforms, null), '');
+});
+
+test('resolves guide action targets to the matching workspace tabs', () => {
+  assert.deepEqual(resolveGuideActionTarget('quickEntry'), { entry: 'quickEntry' });
+  assert.deepEqual(resolveGuideActionTarget('platforms'), { entry: 'platforms' });
+  assert.deepEqual(resolveGuideActionTarget('comparison'), { controls: 'comparison' });
+  assert.deepEqual(resolveGuideActionTarget('unknown'), {});
+});
+
+test('auto opens fullscreen only when generated results are available', () => {
+  assert.equal(shouldAutoOpenFullscreen([{ modelName: 'gpt-image-1' }]), true);
+  assert.equal(shouldAutoOpenFullscreen([]), false);
+  assert.equal(shouldAutoOpenFullscreen(null), false);
+});
+
+test('filters and paginates saved model price rules', () => {
+  const rules = [
+    { id: 'r1', platformId: 'p1', modelId: 'm1' },
+    { id: 'r2', platformId: 'p1', modelId: 'm2' },
+    { id: 'r3', platformId: 'p2', modelId: 'm1' },
+    { id: 'r4', platformId: 'p2', modelId: 'm2' },
+    { id: 'r5', platformId: 'p2', modelId: 'm3' },
+  ];
+
+  assert.deepEqual(
+    filterAndPaginateRules({
+      rules,
+      filters: { platformId: 'p2', modelId: '' },
+      page: 1,
+      pageSize: 2,
+    }),
+    {
+      items: [rules[2], rules[3]],
+      total: 3,
+      page: 1,
+      pageSize: 2,
+      totalPages: 2,
+      start: 1,
+      end: 2,
+    },
+  );
+
+  assert.deepEqual(
+    filterAndPaginateRules({
+      rules,
+      filters: { platformId: 'p2', modelId: 'm2' },
+      page: 99,
+      pageSize: 10,
+    }),
+    {
+      items: [rules[3]],
+      total: 1,
+      page: 1,
+      pageSize: 10,
+      totalPages: 1,
+      start: 1,
+      end: 1,
+    },
+  );
+});
+
+test('returns empty pagination metadata when no rules match filters', () => {
+  const result = filterAndPaginateRules({
+    rules: [{ id: 'r1', platformId: 'p1', modelId: 'm1' }],
+    filters: { platformId: 'missing', modelId: '' },
+    page: 2,
+    pageSize: 10,
+  });
+
+  assert.deepEqual(result, {
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 10,
+    totalPages: 1,
+    start: 0,
+    end: 0,
+  });
+});
+
+test('filters saved items by search query and exact fields before paginating', () => {
+  const platforms = [
+    { id: 'p1', name: 'DreamWith Art', defaultCurrency: 'USD' },
+    { id: 'p2', name: 'OpenAI', defaultCurrency: 'USD' },
+    { id: 'p3', name: 'DreamStudio', defaultCurrency: 'GBP' },
+  ];
+  const plans = [
+    { id: 'plan-1', platformId: 'p1', name: 'Starter' },
+    { id: 'plan-2', platformId: 'p2', name: 'Pro' },
+    { id: 'plan-3', platformId: 'p1', name: 'Team' },
+  ];
+  const models = [
+    { id: 'm1', name: 'gpt-image-1', category: 'image' },
+    { id: 'm2', name: 'gpt-4.1', category: 'text' },
+    { id: 'm3', name: 'flux', category: 'image' },
+  ];
+
+  assert.deepEqual(
+    filterAndPaginateSavedItems({
+      items: platforms,
+      filters: { query: 'dream' },
+      searchFields: ['name'],
+      page: 1,
+      pageSize: 1,
+    }),
+    {
+      items: [platforms[0]],
+      total: 2,
+      page: 1,
+      pageSize: 1,
+      totalPages: 2,
+      start: 1,
+      end: 1,
+    },
+  );
+
+  assert.deepEqual(
+    filterAndPaginateSavedItems({
+      items: plans,
+      filters: { platformId: 'p1' },
+      page: 2,
+      pageSize: 1,
+    }).items,
+    [plans[2]],
+  );
+
+  assert.deepEqual(
+    filterAndPaginateSavedItems({
+      items: models,
+      filters: { category: 'image' },
+      page: 1,
+      pageSize: 10,
+    }).items,
+    [models[0], models[2]],
+  );
+});
+
 test('builds partial text unit definitions from form values', () => {
   const unitDefinitions = buildUnitDefinitions({
-    pricingMode: 'direct_price_based',
     category: 'text',
     values: {
       textInputValue: '0.1',
@@ -31,16 +199,68 @@ test('builds partial text unit definitions from form values', () => {
   assert.deepEqual(unitDefinitions, [{ unitType: 'per_1k_input_tokens', value: 0.1 }]);
 });
 
-test('builds included output units from form values', () => {
+test('builds partial text unit definitions from guided per-1k consumption fields', () => {
   const unitDefinitions = buildUnitDefinitions({
-    pricingMode: 'plan_output_based',
-    category: 'image',
+    category: 'text',
     values: {
-      includedOutputUnits: '2000',
+      textInputCreditsPer1k: '0.0009',
+      textOutputCreditsPer1k: '',
     },
   });
 
-  assert.deepEqual(unitDefinitions, [{ unitType: 'per_image', value: 2000 }]);
+  assert.deepEqual(unitDefinitions, [{ unitType: 'per_1k_input_tokens', value: 0.0009 }]);
+});
+
+test('shows text per-1k consumption fields including cached input for text models', () => {
+  assert.deepEqual(getVisibleConsumptionFieldNames('text'), [
+    'textInputCreditsPer1k',
+    'textOutputCreditsPer1k',
+    'textCachedInputCreditsPer1k',
+  ]);
+});
+
+test('builds cached-input text unit definitions from guided per-1k consumption fields', () => {
+  const unitDefinitions = buildUnitDefinitions({
+    category: 'text',
+    values: {
+      textCachedInputCreditsPer1k: '0.00009',
+    },
+  });
+
+  assert.deepEqual(unitDefinitions, [
+    { unitType: 'per_1k_cached_input_tokens', value: 0.00009 },
+  ]);
+});
+
+test('shows only direct text price fields in quick entry after choosing text direct pricing', () => {
+  assert.deepEqual(
+    getVisibleQuickEntryPriceFieldNames('text', 'direct_price_based'),
+    ['textUnitSize', 'textInputPrice', 'textOutputPrice', 'textCachedInputPrice'],
+  );
+});
+
+test('shows only image credit field in quick entry after choosing image credit pricing', () => {
+  assert.deepEqual(
+    getVisibleQuickEntryPriceFieldNames('image', 'plan_credit_based'),
+    ['imageCreditsPerUnit'],
+  );
+});
+
+test('scenario fields stay hidden until comparison model categories are selected', () => {
+  assert.deepEqual(getVisibleScenarioFieldCategories([]), []);
+  assert.deepEqual(getVisibleScenarioFieldCategories(['video']), ['video']);
+  assert.deepEqual(getVisibleScenarioFieldCategories(['text', 'image']), ['text', 'image']);
+});
+
+test('formats stored text token counts as million-token form values', () => {
+  assert.equal(formatTokenCountAsMillions(1000000), 1);
+  assert.equal(formatTokenCountAsMillions(500000), 0.5);
+});
+
+test('parses million-token form values back to raw token counts', () => {
+  assert.equal(parseMillionTokenInput('1'), 1000000);
+  assert.equal(parseMillionTokenInput('0.5'), 500000);
+  assert.equal(parseMillionTokenInput('', 250000), 250000);
 });
 
 test('builds comparison rows using selected platforms and models', () => {
@@ -75,61 +295,4 @@ test('builds comparison rows using selected platforms and models', () => {
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].singleRunCost, 1.95);
-});
-
-test('formats comparison rows as csv with escaped values', () => {
-  const csv = formatComparisonRowsAsCsv([{
-    platformName: 'Foo, AI',
-    modelName: 'gpt-image-1',
-    category: 'image',
-    pricingMode: 'plan_credit_based',
-    planName: 'Pro "Plus"',
-    planTotalPrice: 39,
-    totalCredits: 400,
-    includedUnits: null,
-    unitUsageDescription: '20 credits / image',
-    originalUnitCost: 1.95,
-    originalCurrency: 'CNY',
-    exchangeRate: 1,
-    convertedUnitCost: 1.95,
-    singleRunCost: 1.95,
-  }]);
-
-  assert.equal(
-    csv,
-    [
-      'Platform,Model,Category,Pricing Mode,Plan Name,Plan Total Price,Total Credits,套餐总可生成数量,Unit Usage Description,Original Currency Unit Cost,Exchange Rate,Converted Unit Cost,Typical Single-Run Cost',
-      '"Foo, AI",gpt-image-1,image,plan_credit_based,"Pro ""Plus""",39,400,,20 credits / image,1.95 CNY,1,1.95,1.95',
-    ].join('\n'),
-  );
-});
-
-test('formats comparison rows as markdown table', () => {
-  const markdown = formatComparisonRowsAsMarkdown([{
-    platformName: 'Foo AI',
-    modelName: 'gpt-image-1',
-    category: 'image',
-    pricingMode: 'plan_credit_based',
-    planName: 'Pro',
-    planTotalPrice: 39,
-    totalCredits: 400,
-    includedUnits: null,
-    unitUsageDescription: '20 credits | image',
-    originalUnitCost: 1.95,
-    originalCurrency: 'CNY',
-    exchangeRate: 1,
-    convertedUnitCost: 1.95,
-    singleRunCost: 1.95,
-  }]);
-
-  assert.equal(
-    markdown,
-    [
-      '# AI SaaS Price Comparison Results',
-      '',
-      '| Platform | Model | Category | Pricing Mode | Plan Name | Plan Total Price | Total Credits | 套餐总可生成数量 | Unit Usage Description | Original Currency Unit Cost | Exchange Rate | Converted Unit Cost | Typical Single-Run Cost |',
-      '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-      '| Foo AI | gpt-image-1 | image | plan_credit_based | Pro | 39 | 400 |  | 20 credits \\| image | 1.95 CNY | 1 | 1.95 | 1.95 |',
-    ].join('\n'),
-  );
 });

@@ -12,6 +12,21 @@ test('creates a translator for zh-CN messages', () => {
   assert.equal(t('results.title'), '结果输出');
 });
 
+test('labels quick entry text price unit as default 1M tokens', () => {
+  const t = createTranslator('zh-CN');
+
+  assert.match(t('quickEntry.textUnitSize'), /1M tokens/);
+});
+
+test('labels settings and comparison text fields as 1M token units', () => {
+  const t = createTranslator('zh-CN');
+
+  assert.match(t('forms.defaultTextInput'), /1M tokens/);
+  assert.match(t('forms.defaultTextOutput'), /1M tokens/);
+  assert.match(t('forms.runtimeTextInput'), /1M tokens/);
+  assert.match(t('forms.runtimeTextOutput'), /1M tokens/);
+});
+
 test('builds calculation sections with formulas for zh-CN', () => {
   const sections = buildCalculationSections('zh-CN');
   const titles = sections.map((section) => section.title);

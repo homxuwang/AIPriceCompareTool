@@ -1,47 +1,149 @@
 import { buildComparisonRow } from '../lib/calculation.js';
 
-const RESULT_EXPORT_COLUMNS = [
-  ['platformName', 'Platform'],
-  ['modelName', 'Model'],
-  ['category', 'Category'],
-  ['pricingMode', 'Pricing Mode'],
-  ['planName', 'Plan Name'],
-  ['planTotalPrice', 'Plan Total Price'],
-  ['totalCredits', 'Total Credits'],
-  ['includedUnits', '套餐总可生成数量'],
-  ['unitUsageDescription', 'Unit Usage Description'],
-  ['originalUnitCostWithCurrency', 'Original Currency Unit Cost'],
-  ['exchangeRate', 'Exchange Rate'],
-  ['convertedUnitCost', 'Converted Unit Cost'],
-  ['singleRunCost', 'Typical Single-Run Cost'],
-];
+const consumptionFieldsByCategory = {
+  text: ['textInputCreditsPer1k', 'textOutputCreditsPer1k', 'textCachedInputCreditsPer1k'],
+  image: ['imageCreditsPerUnit'],
+  video: ['videoCreditsPerSecond', 'videoCreditsPerMinute'],
+  audio: ['audioCreditsPerSecond', 'audioCreditsPerMinute'],
+};
 
-export function buildUnitDefinitions({ pricingMode, category, values }) {
-  if (pricingMode === 'plan_output_based') {
-    return compactUnitDefinitions([[resolveOutputUnitType(category), values.includedOutputUnits]]);
-  }
+const directPriceFieldsByCategory = {
+  text: ['textUnitSize', 'textInputPrice', 'textOutputPrice', 'textCachedInputPrice'],
+  image: ['imagePrice'],
+  video: ['mediaPrice', 'mediaUnitKind', 'mediaUnitSize'],
+  audio: ['mediaPrice', 'mediaUnitKind', 'mediaUnitSize'],
+};
 
+const TOKENS_PER_MILLION = 1000000;
+
+export function buildUnitDefinitions({ category, values }) {
   switch (category) {
     case 'text':
       return compactUnitDefinitions([
-        ['per_1k_input_tokens', values.textInputValue],
-        ['per_1k_output_tokens', values.textOutputValue],
+        ['per_1k_input_tokens', values.textInputCreditsPer1k ?? values.textInputValue],
+        ['per_1k_output_tokens', values.textOutputCreditsPer1k ?? values.textOutputValue],
+        ['per_1k_cached_input_tokens', values.textCachedInputCreditsPer1k],
       ]);
     case 'image':
-      return compactUnitDefinitions([['per_image', values.imageValue]]);
+      return compactUnitDefinitions([['per_image', values.imageCreditsPerUnit ?? values.imageValue]]);
     case 'video':
       return compactUnitDefinitions([
-        ['per_second', values.videoSecondValue],
-        ['per_minute', values.videoMinuteValue],
+        ['per_second', values.videoCreditsPerSecond ?? values.videoSecondValue],
+        ['per_minute', values.videoCreditsPerMinute ?? values.videoMinuteValue],
       ]);
     case 'audio':
       return compactUnitDefinitions([
-        ['per_second', values.audioSecondValue],
-        ['per_minute', values.audioMinuteValue],
+        ['per_second', values.audioCreditsPerSecond ?? values.audioSecondValue],
+        ['per_minute', values.audioCreditsPerMinute ?? values.audioMinuteValue],
       ]);
     default:
       return [];
   }
+}
+
+export function getVisibleConsumptionFieldNames(category) {
+  return consumptionFieldsByCategory[category] ?? [];
+}
+
+export function getVisibleQuickEntryPriceFieldNames(category, pricingMode) {
+  if (pricingMode === 'direct_price_based') {
+    return directPriceFieldsByCategory[category] ?? [];
+  }
+
+  if (pricingMode === 'plan_credit_based') {
+    return getVisibleConsumptionFieldNames(category);
+  }
+
+  return [];
+}
+
+export function getVisibleScenarioFieldCategories(categories) {
+  return Array.from(new Set(categories)).filter((category) =>
+    Object.hasOwn(consumptionFieldsByCategory, category),
+  );
+}
+
+export function resolveRememberedPlatformId(platforms, rememberedPlatformId) {
+  return platforms.some((platform) => platform.id === rememberedPlatformId)
+    ? rememberedPlatformId
+    : '';
+}
+
+export function resolveGuideActionTarget(action) {
+  const targets = {
+    quickEntry: { entry: 'quickEntry' },
+    platforms: { entry: 'platforms' },
+    comparison: { controls: 'comparison' },
+  };
+
+  return targets[action] ?? {};
+}
+
+export function shouldAutoOpenFullscreen(rows) {
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+export function filterAndPaginateRules({
+  rules,
+  filters = {},
+  page = 1,
+  pageSize = 10,
+}) {
+  return filterAndPaginateSavedItems({
+    items: rules,
+    filters,
+    page,
+    pageSize,
+  });
+}
+
+export function filterAndPaginateSavedItems({
+  items,
+  filters = {},
+  searchFields = [],
+  page = 1,
+  pageSize = 10,
+}) {
+  const normalizedPageSize = normalizePositiveInteger(pageSize, 10);
+  const normalizedQuery = normalizeSearchText(filters.query);
+  const filteredItems = items.filter((item) => {
+    const queryMatch = !normalizedQuery || searchFields.some((fieldName) =>
+      normalizeSearchText(item[fieldName]).includes(normalizedQuery),
+    );
+    const exactMatch = Object.entries(filters)
+      .filter(([fieldName]) => fieldName !== 'query')
+      .every(([fieldName, value]) => !value || item[fieldName] === value);
+    return queryMatch && exactMatch;
+  });
+  const total = filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(total / normalizedPageSize));
+  const normalizedPage = Math.min(Math.max(1, normalizePositiveInteger(page, 1)), totalPages);
+  const startIndex = (normalizedPage - 1) * normalizedPageSize;
+  const pageItems = filteredItems.slice(startIndex, startIndex + normalizedPageSize);
+
+  return {
+    items: pageItems,
+    total,
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    totalPages,
+    start: total === 0 ? 0 : startIndex + 1,
+    end: total === 0 ? 0 : startIndex + pageItems.length,
+  };
+}
+
+export function formatTokenCountAsMillions(tokenCount) {
+  const value = Number(tokenCount);
+  return Number.isFinite(value) ? value / TOKENS_PER_MILLION : 0;
+}
+
+export function parseMillionTokenInput(rawValue, fallback = 0) {
+  if (rawValue === '' || rawValue == null) {
+    return fallback;
+  }
+
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value * TOKENS_PER_MILLION : fallback;
 }
 
 export function buildComparisonRows({ state, filters }) {
@@ -53,45 +155,56 @@ export function buildComparisonRows({ state, filters }) {
         filters.modelIds.length === 0 || filters.modelIds.includes(rule.modelId);
       return platformMatch && modelMatch;
     })
-    .map((rule) => {
+    .filter((rule) => {
+      if (filters.modelIds.length === 0) return true;
+      const model = state.models.find((item) => item.id === rule.modelId);
+      if (!model) return false;
+      const selectedModels = state.models.filter((m) => filters.modelIds.includes(m.id));
+      const selectedCategories = new Set(selectedModels.map((m) => m.category));
+      return selectedCategories.size === 0 || selectedCategories.has(model.category);
+    })
+    .flatMap((rule) => {
       const platform = state.platforms.find((item) => item.id === rule.platformId);
       const model = state.models.find((item) => item.id === rule.modelId);
-      const plan = state.plans.find((item) => item.id === rule.planId) ?? null;
 
-      return buildComparisonRow({
+      if (rule.pricingMode === 'plan_credit_based') {
+        const platformPlans = state.plans.filter((item) => item.platformId === rule.platformId);
+        
+        if (platformPlans.length === 0) {
+          return [buildComparisonRow({
+            platform,
+            model,
+            plan: null,
+            rule,
+            scenario: filters.scenario,
+            exchangeRates: state.exchangeRates,
+            targetCurrency: filters.targetCurrency,
+          })];
+        }
+        
+        return platformPlans.map((plan) =>
+          buildComparisonRow({
+            platform,
+            model,
+            plan,
+            rule,
+            scenario: filters.scenario,
+            exchangeRates: state.exchangeRates,
+            targetCurrency: filters.targetCurrency,
+          })
+        );
+      }
+      
+      return [buildComparisonRow({
         platform,
         model,
-        plan,
+        plan: null,
         rule,
         scenario: filters.scenario,
         exchangeRates: state.exchangeRates,
         targetCurrency: filters.targetCurrency,
-      });
+      })];
     });
-}
-
-export function formatComparisonRowsAsCsv(rows) {
-  return [
-    RESULT_EXPORT_COLUMNS.map(([, label]) => formatCsvCell(label)).join(','),
-    ...rows.map((row) => RESULT_EXPORT_COLUMNS
-      .map(([key]) => formatCsvCell(resolveExportValue(row, key)))
-      .join(',')),
-  ].join('\n');
-}
-
-export function formatComparisonRowsAsMarkdown(rows) {
-  const headers = RESULT_EXPORT_COLUMNS.map(([, label]) => label);
-  const separator = headers.map(() => '---');
-  const body = rows.map((row) => RESULT_EXPORT_COLUMNS
-    .map(([key]) => formatMarkdownCell(resolveExportValue(row, key))));
-
-  return [
-    '# AI SaaS Price Comparison Results',
-    '',
-    formatMarkdownRow(headers),
-    formatMarkdownRow(separator),
-    ...body.map(formatMarkdownRow),
-  ].join('\n');
 }
 
 function compactUnitDefinitions(entries) {
@@ -103,41 +216,11 @@ function compactUnitDefinitions(entries) {
     .filter((entry) => entry.value != null && !Number.isNaN(entry.value));
 }
 
-function resolveExportValue(row, key) {
-  if (key === 'originalUnitCostWithCurrency') {
-    return `${row.originalUnitCost} ${row.originalCurrency}`;
-  }
-
-  return row[key] ?? '';
+function normalizePositiveInteger(value, fallback) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : fallback;
 }
 
-function formatCsvCell(value) {
-  const text = String(value);
-  if (!/[",\n\r]/.test(text)) {
-    return text;
-  }
-
-  return `"${text.replaceAll('"', '""')}"`;
-}
-
-function formatMarkdownRow(values) {
-  return `| ${values.join(' | ')} |`;
-}
-
-function formatMarkdownCell(value) {
-  return String(value).replaceAll('|', '\\|').replaceAll('\n', '<br>');
-}
-
-function resolveOutputUnitType(category) {
-  switch (category) {
-    case 'image':
-      return 'per_image';
-    case 'video':
-      return 'per_minute';
-    case 'audio':
-      return 'per_minute';
-    case 'text':
-    default:
-      return 'per_1k_output_tokens';
-  }
+function normalizeSearchText(value) {
+  return String(value ?? '').trim().toLocaleLowerCase();
 }
