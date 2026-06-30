@@ -6,6 +6,15 @@ export const DEFAULT_SCENARIO = {
   audioMinutes: 1,
 };
 
+export const COMMON_CURRENCIES = [
+  { code: 'CNY', name: '人民币' },
+  { code: 'USD', name: '美元' },
+  { code: 'EUR', name: '欧元' },
+  { code: 'GBP', name: '英镑' },
+  { code: 'JPY', name: '日元' },
+  { code: 'HKD', name: '港币' },
+];
+
 export const DEFAULT_EXCHANGE_RATES = {
   baseCurrency: 'CNY',
   rates: {

@@ -3,11 +3,16 @@ import assert from 'node:assert/strict';
 import {
   buildComparisonRows,
   buildUnitDefinitions,
+  filterAndPaginateRules,
+  filterAndPaginateSavedItems,
   formatTokenCountAsMillions,
   getVisibleQuickEntryPriceFieldNames,
   getVisibleScenarioFieldCategories,
   getVisibleConsumptionFieldNames,
   parseMillionTokenInput,
+  resolveGuideActionTarget,
+  resolveRememberedPlatformId,
+  shouldAutoOpenFullscreen,
 } from '../src/options/helpers.js';
 
 test('builds image unit definitions from form values', () => {
@@ -34,6 +39,152 @@ test('builds image unit definitions from guided credit consumption fields', () =
 
 test('shows only image consumption fields for image models', () => {
   assert.deepEqual(getVisibleConsumptionFieldNames('image'), ['imageCreditsPerUnit']);
+});
+
+test('resolves remembered platform id only when the platform still exists', () => {
+  const platforms = [
+    { id: 'p1', name: 'First AI' },
+    { id: 'p2', name: 'Second AI' },
+  ];
+
+  assert.equal(resolveRememberedPlatformId(platforms, 'p2'), 'p2');
+  assert.equal(resolveRememberedPlatformId(platforms, 'missing'), '');
+  assert.equal(resolveRememberedPlatformId(platforms, null), '');
+});
+
+test('resolves guide action targets to the matching workspace tabs', () => {
+  assert.deepEqual(resolveGuideActionTarget('quickEntry'), { entry: 'quickEntry' });
+  assert.deepEqual(resolveGuideActionTarget('platforms'), { entry: 'platforms' });
+  assert.deepEqual(resolveGuideActionTarget('comparison'), { controls: 'comparison' });
+  assert.deepEqual(resolveGuideActionTarget('unknown'), {});
+});
+
+test('auto opens fullscreen only when generated results are available', () => {
+  assert.equal(shouldAutoOpenFullscreen([{ modelName: 'gpt-image-1' }]), true);
+  assert.equal(shouldAutoOpenFullscreen([]), false);
+  assert.equal(shouldAutoOpenFullscreen(null), false);
+});
+
+test('filters and paginates saved model price rules', () => {
+  const rules = [
+    { id: 'r1', platformId: 'p1', modelId: 'm1' },
+    { id: 'r2', platformId: 'p1', modelId: 'm2' },
+    { id: 'r3', platformId: 'p2', modelId: 'm1' },
+    { id: 'r4', platformId: 'p2', modelId: 'm2' },
+    { id: 'r5', platformId: 'p2', modelId: 'm3' },
+  ];
+
+  assert.deepEqual(
+    filterAndPaginateRules({
+      rules,
+      filters: { platformId: 'p2', modelId: '' },
+      page: 1,
+      pageSize: 2,
+    }),
+    {
+      items: [rules[2], rules[3]],
+      total: 3,
+      page: 1,
+      pageSize: 2,
+      totalPages: 2,
+      start: 1,
+      end: 2,
+    },
+  );
+
+  assert.deepEqual(
+    filterAndPaginateRules({
+      rules,
+      filters: { platformId: 'p2', modelId: 'm2' },
+      page: 99,
+      pageSize: 10,
+    }),
+    {
+      items: [rules[3]],
+      total: 1,
+      page: 1,
+      pageSize: 10,
+      totalPages: 1,
+      start: 1,
+      end: 1,
+    },
+  );
+});
+
+test('returns empty pagination metadata when no rules match filters', () => {
+  const result = filterAndPaginateRules({
+    rules: [{ id: 'r1', platformId: 'p1', modelId: 'm1' }],
+    filters: { platformId: 'missing', modelId: '' },
+    page: 2,
+    pageSize: 10,
+  });
+
+  assert.deepEqual(result, {
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 10,
+    totalPages: 1,
+    start: 0,
+    end: 0,
+  });
+});
+
+test('filters saved items by search query and exact fields before paginating', () => {
+  const platforms = [
+    { id: 'p1', name: 'DreamWith Art', defaultCurrency: 'USD' },
+    { id: 'p2', name: 'OpenAI', defaultCurrency: 'USD' },
+    { id: 'p3', name: 'DreamStudio', defaultCurrency: 'GBP' },
+  ];
+  const plans = [
+    { id: 'plan-1', platformId: 'p1', name: 'Starter' },
+    { id: 'plan-2', platformId: 'p2', name: 'Pro' },
+    { id: 'plan-3', platformId: 'p1', name: 'Team' },
+  ];
+  const models = [
+    { id: 'm1', name: 'gpt-image-1', category: 'image' },
+    { id: 'm2', name: 'gpt-4.1', category: 'text' },
+    { id: 'm3', name: 'flux', category: 'image' },
+  ];
+
+  assert.deepEqual(
+    filterAndPaginateSavedItems({
+      items: platforms,
+      filters: { query: 'dream' },
+      searchFields: ['name'],
+      page: 1,
+      pageSize: 1,
+    }),
+    {
+      items: [platforms[0]],
+      total: 2,
+      page: 1,
+      pageSize: 1,
+      totalPages: 2,
+      start: 1,
+      end: 1,
+    },
+  );
+
+  assert.deepEqual(
+    filterAndPaginateSavedItems({
+      items: plans,
+      filters: { platformId: 'p1' },
+      page: 2,
+      pageSize: 1,
+    }).items,
+    [plans[2]],
+  );
+
+  assert.deepEqual(
+    filterAndPaginateSavedItems({
+      items: models,
+      filters: { category: 'image' },
+      page: 1,
+      pageSize: 10,
+    }).items,
+    [models[0], models[2]],
+  );
 });
 
 test('builds partial text unit definitions from form values', () => {

@@ -18,6 +18,10 @@ export function createEmptyState() {
       locale: 'zh-CN',
       targetCurrency: 'CNY',
     },
+    lastUsed: {
+      planPlatformId: null,
+      planBillingCycle: 'monthly',
+    },
   };
 }
 

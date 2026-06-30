@@ -63,6 +63,75 @@ export function getVisibleScenarioFieldCategories(categories) {
   );
 }
 
+export function resolveRememberedPlatformId(platforms, rememberedPlatformId) {
+  return platforms.some((platform) => platform.id === rememberedPlatformId)
+    ? rememberedPlatformId
+    : '';
+}
+
+export function resolveGuideActionTarget(action) {
+  const targets = {
+    quickEntry: { entry: 'quickEntry' },
+    platforms: { entry: 'platforms' },
+    comparison: { controls: 'comparison' },
+  };
+
+  return targets[action] ?? {};
+}
+
+export function shouldAutoOpenFullscreen(rows) {
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+export function filterAndPaginateRules({
+  rules,
+  filters = {},
+  page = 1,
+  pageSize = 10,
+}) {
+  return filterAndPaginateSavedItems({
+    items: rules,
+    filters,
+    page,
+    pageSize,
+  });
+}
+
+export function filterAndPaginateSavedItems({
+  items,
+  filters = {},
+  searchFields = [],
+  page = 1,
+  pageSize = 10,
+}) {
+  const normalizedPageSize = normalizePositiveInteger(pageSize, 10);
+  const normalizedQuery = normalizeSearchText(filters.query);
+  const filteredItems = items.filter((item) => {
+    const queryMatch = !normalizedQuery || searchFields.some((fieldName) =>
+      normalizeSearchText(item[fieldName]).includes(normalizedQuery),
+    );
+    const exactMatch = Object.entries(filters)
+      .filter(([fieldName]) => fieldName !== 'query')
+      .every(([fieldName, value]) => !value || item[fieldName] === value);
+    return queryMatch && exactMatch;
+  });
+  const total = filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(total / normalizedPageSize));
+  const normalizedPage = Math.min(Math.max(1, normalizePositiveInteger(page, 1)), totalPages);
+  const startIndex = (normalizedPage - 1) * normalizedPageSize;
+  const pageItems = filteredItems.slice(startIndex, startIndex + normalizedPageSize);
+
+  return {
+    items: pageItems,
+    total,
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+    totalPages,
+    start: total === 0 ? 0 : startIndex + 1,
+    end: total === 0 ? 0 : startIndex + pageItems.length,
+  };
+}
+
 export function formatTokenCountAsMillions(tokenCount) {
   const value = Number(tokenCount);
   return Number.isFinite(value) ? value / TOKENS_PER_MILLION : 0;
@@ -145,4 +214,13 @@ function compactUnitDefinitions(entries) {
       value: rawValue === '' ? null : Number(rawValue),
     }))
     .filter((entry) => entry.value != null && !Number.isNaN(entry.value));
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : fallback;
+}
+
+function normalizeSearchText(value) {
+  return String(value ?? '').trim().toLocaleLowerCase();
 }

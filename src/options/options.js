@@ -1,4 +1,5 @@
 import {
+  COMMON_CURRENCIES,
   DEFAULT_EXCHANGE_RATES,
   DEFAULT_SCENARIO,
 } from '../lib/defaults.js';
@@ -10,11 +11,16 @@ import {
 import {
   buildComparisonRows,
   buildUnitDefinitions,
+  filterAndPaginateRules,
+  filterAndPaginateSavedItems,
   formatTokenCountAsMillions,
   getVisibleQuickEntryPriceFieldNames,
   getVisibleScenarioFieldCategories,
   getVisibleConsumptionFieldNames,
   parseMillionTokenInput,
+  resolveGuideActionTarget,
+  resolveRememberedPlatformId,
+  shouldAutoOpenFullscreen,
 } from './helpers.js';
 import {
   buildQuickEntryMutation,
@@ -36,14 +42,26 @@ const repository = canUseChromeStorage()
   : createInMemoryRepository();
 
 const tabState = {
-  entry: 'quickEntry',
+  entry: 'guide',
   controls: 'settings',
   selectedPlatformId: null,
+  ruleFilters: {
+    platformId: '',
+    modelId: '',
+  },
+  rulePage: 1,
+  rulePageSize: 10,
+  savedLists: {
+    platforms: { filters: { query: '' }, page: 1, pageSize: 10 },
+    plans: { filters: { platformId: '' }, page: 1, pageSize: 10 },
+    models: { filters: { category: '' }, page: 1, pageSize: 10 },
+  },
 };
 
 let state = await repository.loadState();
 let comparisonRows = [];
 let flash = null;
+let isFullscreenOpen = false;
 
 render();
 
@@ -96,7 +114,6 @@ function render() {
         <section class="panel panel-column">
           <div class="panel-header">
             <h2>${t('controls.title')}</h2>
-            <p>${t('controls.subtitle')}</p>
           </div>
           <div class="tab-strip">
             ${renderTabButton('controls', 'settings', t('controls.settings'))}
@@ -111,8 +128,11 @@ function render() {
         <section class="panel panel-column panel-result">
           <div class="panel-header">
             <h2>${t('results.title')}</h2>
-            <p>${t('results.subtitle')}</p>
-            <button id="btn-fullscreen" class="btn-fullscreen" title="全屏查看">⛶ 全屏</button>
+            <div class="panel-header-actions">
+              <button id="btn-download-csv" class="btn-secondary btn-sm" title="${t('results.downloadCsv')}">${t('results.downloadCsv')}</button>
+              <button id="btn-download-md" class="btn-secondary btn-sm" title="${t('results.downloadMd')}">${t('results.downloadMd')}</button>
+              <button id="btn-fullscreen" class="btn-secondary btn-sm" title="全屏查看">全屏</button>
+            </div>
           </div>
           <div class="result-summary">
             <div>
@@ -135,11 +155,11 @@ function render() {
       </div>
     </main>
 
-    <div id="fullscreen-modal" class="fullscreen-modal" style="display: none;">
+    <div id="fullscreen-modal" class="fullscreen-modal ${isFullscreenOpen ? 'is-open' : ''}" aria-hidden="${isFullscreenOpen ? 'false' : 'true'}">
       <div class="fullscreen-content">
         <div class="fullscreen-header">
           <h2>${t('results.title')}</h2>
-          <button id="btn-close-fullscreen" class="btn-close-fullscreen">✕ 关闭</button>
+          <button id="btn-close-fullscreen" class="btn-close-fullscreen">关闭全屏</button>
         </div>
         <div class="fullscreen-body">
           ${renderResultsTable(t)}
@@ -149,6 +169,7 @@ function render() {
   `;
 
   bindEvents();
+  syncFullscreenBodyState();
 }
 
 function getLocale() {
@@ -165,6 +186,17 @@ function renderMetric(label, value) {
       <span>${label}</span>
       <strong>${value}</strong>
     </div>
+  `;
+}
+
+function renderCurrencySelect(name, id, selectedCurrency, required = true) {
+  const currentCurrency = (selectedCurrency || '').toUpperCase();
+  return `
+    <select id="${id}" name="${name}" ${required ? 'required' : ''}>
+      ${COMMON_CURRENCIES.map(currency => 
+        `<option value="${currency.code}" ${currency.code === currentCurrency ? 'selected' : ''}>${currency.code} - ${currency.name}</option>`
+      ).join('')}
+    </select>
   `;
 }
 
@@ -185,6 +217,7 @@ function renderTabButton(group, value, label) {
 function renderEntryTabContent(translate) {
   return `
     <div class="tab-strip">
+      ${renderTabButton('entry', 'guide', translate('entry.guide'))}
       ${renderTabButton('entry', 'quickEntry', translate('entry.quickEntry'))}
       ${renderTabButton('entry', 'platforms', translate('entry.platforms'))}
       ${renderTabButton('entry', 'plans', translate('entry.plans'))}
@@ -197,31 +230,132 @@ function renderEntryTabContent(translate) {
 
 function renderEntryTabPanel(translate) {
   switch (tabState.entry) {
+    case 'guide':
+      return renderOnboardingGuide(translate);
     case 'quickEntry':
       return renderQuickEntryForm(translate);
     case 'platforms':
       return `
         ${renderPlatformForm(translate)}
-        ${renderCards(translate('entry.savedPlatforms'), state.platforms, (platform) => renderPlatformCard(platform, translate), translate)}
+        ${renderSavedPlatformList(translate)}
       `;
     case 'plans':
       return `
         ${renderPlanForm(translate)}
-        ${renderCards(translate('entry.savedPlans'), state.plans, (plan) => renderPlanCard(plan, translate), translate)}
+        ${renderSavedPlanList(translate)}
       `;
     case 'models':
       return `
         ${renderModelForm(translate)}
-        ${renderCards(translate('entry.savedModels'), state.models, (model) => renderModelCard(model, translate), translate)}
+        ${renderSavedModelList(translate)}
       `;
     case 'rules':
       return `
         ${renderRuleForm(translate)}
-        ${renderCards(translate('entry.savedRules'), state.rules, (rule) => renderRuleCard(rule, translate), translate)}
+        ${renderRuleList(translate)}
       `;
     default:
-      return renderQuickEntryForm(translate);
+      return renderOnboardingGuide(translate);
   }
+}
+
+function renderOnboardingGuide(translate) {
+  return `
+    <section class="onboarding-guide">
+      <div class="onboarding-hero">
+        <div>
+          <span class="guide-kicker">${translate('guide.kicker')}</span>
+          <h3>${translate('guide.title')}</h3>
+          <p>${translate('guide.subtitle')}</p>
+        </div>
+        <div class="guide-flow-visual" aria-hidden="true">
+          <span>${translate('guide.visualSite')}</span>
+          <span>${translate('guide.visualPlan')}</span>
+          <span>${translate('guide.visualModel')}</span>
+          <span>${translate('guide.visualResult')}</span>
+        </div>
+      </div>
+
+      <div class="guide-cards">
+        ${renderOnboardingStep({
+          number: '1',
+          title: translate('guide.step1Title'),
+          body: translate('guide.step1Body'),
+          illustration: 'site',
+        })}
+        ${renderOnboardingStep({
+          number: '2',
+          title: translate('guide.step2Title'),
+          body: translate('guide.step2Body'),
+          illustration: 'model',
+        })}
+        ${renderOnboardingStep({
+          number: '3',
+          title: translate('guide.step3Title'),
+          body: translate('guide.step3Body'),
+          illustration: 'rule',
+        })}
+        ${renderOnboardingStep({
+          number: '4',
+          title: translate('guide.step4Title'),
+          body: translate('guide.step4Body'),
+          illustration: 'compare',
+        })}
+      </div>
+
+      <div class="guide-actions">
+        <button type="button" data-guide-action="quickEntry">${translate('guide.startQuickEntry')}</button>
+        <button class="button-secondary" type="button" data-guide-action="platforms">${translate('guide.managePlatforms')}</button>
+        <button class="button-secondary" type="button" data-guide-action="comparison">${translate('guide.openComparison')}</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderOnboardingStep({ number, title, body, illustration }) {
+  return `
+    <article class="guide-card">
+      <div class="guide-card-copy">
+        <span class="guide-step-num">${number}</span>
+        <div>
+          <strong>${title}</strong>
+          <p>${body}</p>
+        </div>
+      </div>
+      <div class="guide-illustration guide-illustration-${illustration}" aria-hidden="true">
+        ${renderGuideIllustration(illustration)}
+      </div>
+    </article>
+  `;
+}
+
+function renderGuideIllustration(type) {
+  const illustrations = {
+    site: `
+      <span class="mini-browser-bar"></span>
+      <span class="mini-line wide"></span>
+      <span class="mini-line"></span>
+      <span class="mini-chip-row"><i></i><i></i><i></i></span>
+    `,
+    model: `
+      <span class="mini-select"></span>
+      <span class="mini-pill text"></span>
+      <span class="mini-pill image"></span>
+      <span class="mini-pill video"></span>
+    `,
+    rule: `
+      <span class="mini-equation"><i></i><b></b><i></i></span>
+      <span class="mini-line wide"></span>
+      <span class="mini-line short"></span>
+    `,
+    compare: `
+      <span class="mini-chart"><i></i><i></i><i></i></span>
+      <span class="mini-table-row"></span>
+      <span class="mini-table-row pale"></span>
+    `,
+  };
+
+  return illustrations[type] ?? '';
 }
 
 function renderQuickEntryForm(translate) {
@@ -260,7 +394,7 @@ function renderQuickEntryForm(translate) {
         </div>
         <div class="field">
           <label for="quick-platform-currency">${translate('forms.defaultCurrency')}</label>
-          <input id="quick-platform-currency" name="platformCurrency" value="${defaultCurrency}" required>
+          ${renderCurrencySelect('platformCurrency', 'quick-platform-currency', defaultCurrency)}
         </div>
         <div class="field">
           <label for="quick-pricing-mode">${translate('forms.pricingMode')}</label>
@@ -271,7 +405,7 @@ function renderQuickEntryForm(translate) {
         </div>
         <div class="field" data-quick-pricing-field="direct_price_based">
           <label for="quick-currency">${translate('forms.directCurrency')}</label>
-          <input id="quick-currency" name="currency" value="${defaultCurrency}">
+          ${renderCurrencySelect('currency', 'quick-currency', defaultCurrency, false)}
         </div>
 
         <div class="form-step span-3">
@@ -451,7 +585,7 @@ function renderPlatformForm(translate) {
         </div>
         <div class="field">
           <label for="platform-currency">${translate('forms.defaultCurrency')}</label>
-          <input id="platform-currency" name="defaultCurrency" value="CNY" required>
+          ${renderCurrencySelect('defaultCurrency', 'platform-currency', 'CNY')}
         </div>
         <div class="field span-2">
           <label for="platform-notes">${translate('forms.notes')}</label>
@@ -490,7 +624,7 @@ function renderPlanForm(translate) {
         </div>
         <div class="field">
           <label for="plan-currency">${translate('forms.currency')}</label>
-          <input id="plan-currency" name="currency" value="CNY" required>
+          ${renderCurrencySelect('currency', 'plan-currency', 'CNY')}
         </div>
         <div class="field">
           <label for="plan-cycle">${translate('forms.cycle')}</label>
@@ -547,6 +681,8 @@ function renderModelForm(translate) {
 }
 
 function renderRuleForm(translate) {
+  const rememberedPlatformId = resolveRememberedPlatformId(state.platforms, tabState.selectedPlatformId);
+
   return `
     <section>
       <div class="section-title">
@@ -565,7 +701,10 @@ function renderRuleForm(translate) {
           <label for="rule-platform-id">${translate('forms.platform')}</label>
           <select id="rule-platform-id" name="platformId" required>
             <option value="">请选择</option>
-            ${state.platforms.map((platform) => `<option value="${platform.id}">${platform.name}</option>`).join('')}
+            ${state.platforms.map((platform) => {
+              const selected = platform.id === rememberedPlatformId ? ' selected' : '';
+              return `<option value="${platform.id}"${selected}>${platform.name}</option>`;
+            }).join('')}
           </select>
         </div>
         <div class="field">
@@ -584,7 +723,7 @@ function renderRuleForm(translate) {
         </div>
         <div class="field" data-rule-pricing-field="direct_price_based">
           <label for="rule-currency">${translate('forms.directCurrency')}</label>
-          <input id="rule-currency" name="currency" value="USD">
+          ${renderCurrencySelect('currency', 'rule-currency', 'USD', false)}
         </div>
         <div class="field">
           <label for="rule-notes">${translate('forms.notes')}</label>
@@ -643,6 +782,12 @@ function renderRuleForm(translate) {
 }
 
 function renderPlanFormForPlatform(platform, translate) {
+  const lastBillingCycle = state.lastUsed?.planBillingCycle || 'monthly';
+  const targetCurrency = (state.preferences?.targetCurrency || 'CNY').toUpperCase();
+  const platformCurrency = (platform.defaultCurrency || 'CNY').toUpperCase();
+  const rates = { ...DEFAULT_EXCHANGE_RATES.rates, ...state.exchangeRates?.rates };
+  const defaultRate = platformCurrency === targetCurrency ? 1 : (rates[platformCurrency] || 1);
+  
   return `
     <form class="grid-form compact" id="plan-form">
       <input type="hidden" name="platformId" value="${platform.id}">
@@ -656,15 +801,20 @@ function renderPlanFormForPlatform(platform, translate) {
       </div>
       <div class="field">
         <label for="plan-currency">${translate('forms.currency')}</label>
-        <input id="plan-currency" name="currency" value="${escapeHtml(platform.defaultCurrency)}" required>
+        ${renderCurrencySelect('currency', 'plan-currency', platform.defaultCurrency)}
+      </div>
+      <div class="field">
+        <label for="plan-exchange-rate">${translate('forms.exchangeRate')}</label>
+        <input id="plan-exchange-rate" name="exchangeRate" type="number" step="0.0001" value="${defaultRate}">
+        <small class="field-hint">${translate('forms.exchangeRateHint')}</small>
       </div>
       <div class="field">
         <label for="plan-cycle">${translate('forms.cycle')}</label>
         <select id="plan-cycle" name="billingCycle">
-          <option value="monthly">monthly</option>
-          <option value="yearly">yearly</option>
-          <option value="one_time">one_time</option>
-          <option value="custom">custom</option>
+          <option value="monthly" ${lastBillingCycle === 'monthly' ? 'selected' : ''}>monthly</option>
+          <option value="yearly" ${lastBillingCycle === 'yearly' ? 'selected' : ''}>yearly</option>
+          <option value="one_time" ${lastBillingCycle === 'one_time' ? 'selected' : ''}>one_time</option>
+          <option value="custom" ${lastBillingCycle === 'custom' ? 'selected' : ''}>custom</option>
         </select>
       </div>
       <div class="field">
@@ -709,7 +859,7 @@ function renderRuleFormForPlatform(platform, translate) {
       </div>
       <div class="field" data-rule-pricing-field="direct_price_based">
         <label for="rule-currency">${translate('forms.directCurrency')}</label>
-        <input id="rule-currency" name="currency" value="${escapeHtml(platform.defaultCurrency)}">
+        ${renderCurrencySelect('currency', 'rule-currency', platform.defaultCurrency, false)}
       </div>
       <div class="field">
         <label for="rule-notes">${translate('forms.notes')}</label>
@@ -774,21 +924,15 @@ function renderSettingsForm(translate) {
 
   return `
     <form class="grid-form compact" id="settings-form">
-      <div class="field">
-        <label for="rate-cny">CNY</label>
-        <input id="rate-cny" name="CNY" type="number" step="0.000001" value="${rates.CNY ?? 1}">
-      </div>
-      <div class="field">
-        <label for="rate-usd">USD</label>
-        <input id="rate-usd" name="USD" type="number" step="0.000001" value="${rates.USD ?? 7.2}">
-      </div>
-      <div class="field">
-        <label for="rate-hkd">HKD</label>
-        <input id="rate-hkd" name="HKD" type="number" step="0.000001" value="${rates.HKD ?? 0.92}">
-      </div>
+      ${COMMON_CURRENCIES.map(currency => `
+        <div class="field">
+          <label for="rate-${currency.code.toLowerCase()}">${currency.code} - ${currency.name}</label>
+          <input id="rate-${currency.code.toLowerCase()}" name="${currency.code}" type="number" step="0.000001" value="${rates[currency.code] ?? (currency.code === 'CNY' ? 1 : '')}">
+        </div>
+      `).join('')}
       <div class="field">
         <label for="target-currency">${translate('forms.targetCurrency')}</label>
-        <input id="target-currency" name="targetCurrency" value="${escapeHtml(state.preferences?.targetCurrency ?? 'CNY')}">
+        ${renderCurrencySelect('targetCurrency', 'target-currency', state.preferences?.targetCurrency ?? 'CNY')}
       </div>
       <div class="field">
         <label for="scenario-input">${translate('forms.defaultTextInput')}</label>
@@ -832,8 +976,8 @@ function renderComparisonForm(translate) {
         <div class="checkbox-group-header">
           <label>${translate('forms.filterPlatforms')}</label>
           <span class="checkbox-actions">
-            <button type="button" class="btn-link" onclick="toggleAllCheckboxes('platform', true)">${translate('forms.selectAll')}</button>
-            <button type="button" class="btn-link" onclick="toggleAllCheckboxes('platform', false)">${translate('forms.deselectAll')}</button>
+            <button type="button" class="btn-link" data-action="toggle-all" data-type="platform" data-checked="true">${translate('forms.selectAll')}</button>
+            <button type="button" class="btn-link" data-action="toggle-all" data-type="platform" data-checked="false">${translate('forms.deselectAll')}</button>
           </span>
         </div>
         <div class="checkbox-list" id="platform-checkboxes">
@@ -851,8 +995,8 @@ function renderComparisonForm(translate) {
         <div class="checkbox-group-header">
           <label>${translate('forms.filterModels')}</label>
           <span class="checkbox-actions">
-            <button type="button" class="btn-link" onclick="toggleAllCheckboxes('model', true)">${translate('forms.selectAll')}</button>
-            <button type="button" class="btn-link" onclick="toggleAllCheckboxes('model', false)">${translate('forms.deselectAll')}</button>
+            <button type="button" class="btn-link" data-action="toggle-all" data-type="model" data-checked="true">${translate('forms.selectAll')}</button>
+            <button type="button" class="btn-link" data-action="toggle-all" data-type="model" data-checked="false">${translate('forms.deselectAll')}</button>
           </span>
         </div>
         <div class="checkbox-list" id="model-checkboxes">
@@ -1293,6 +1437,228 @@ function renderCards(title, items, renderer, translate) {
   `;
 }
 
+function renderSavedPlatformList(translate) {
+  const listState = tabState.savedLists.platforms;
+  return renderSavedList({
+    listKey: 'platforms',
+    title: translate('entry.savedPlatforms'),
+    emptyText: translate('cards.empty'),
+    items: state.platforms,
+    renderer: (platform) => renderPlatformCard(platform, translate),
+    filters: listState.filters,
+    page: listState.page,
+    pageSize: listState.pageSize,
+    searchFields: ['name', 'defaultCurrency'],
+    controls: `
+      <div class="field">
+        <label for="platform-list-query">${translate('listFilters.searchPlatform')}</label>
+        <input id="platform-list-query" data-saved-list-filter="platforms" data-filter-name="query" value="${escapeHtml(listState.filters.query)}" placeholder="${translate('listFilters.searchPlaceholder')}">
+      </div>
+    `,
+    translate,
+  });
+}
+
+function renderSavedPlanList(translate) {
+  const listState = tabState.savedLists.plans;
+  return renderSavedList({
+    listKey: 'plans',
+    title: translate('entry.savedPlans'),
+    emptyText: translate('cards.empty'),
+    items: state.plans,
+    renderer: (plan) => renderPlanCard(plan, translate),
+    filters: listState.filters,
+    page: listState.page,
+    pageSize: listState.pageSize,
+    controls: `
+      <div class="field">
+        <label for="plan-list-platform">${translate('listFilters.filterPlatform')}</label>
+        <select id="plan-list-platform" data-saved-list-filter="plans" data-filter-name="platformId">
+          <option value="">${translate('ruleList.allPlatforms')}</option>
+          ${state.platforms.map((platform) => {
+            const selected = platform.id === listState.filters.platformId ? ' selected' : '';
+            return `<option value="${escapeHtml(platform.id)}"${selected}>${escapeHtml(platform.name)}</option>`;
+          }).join('')}
+        </select>
+      </div>
+    `,
+    translate,
+  });
+}
+
+function renderSavedModelList(translate) {
+  const listState = tabState.savedLists.models;
+  return renderSavedList({
+    listKey: 'models',
+    title: translate('entry.savedModels'),
+    emptyText: translate('cards.empty'),
+    items: state.models,
+    renderer: (model) => renderModelCard(model, translate),
+    filters: listState.filters,
+    page: listState.page,
+    pageSize: listState.pageSize,
+    controls: `
+      <div class="field">
+        <label for="model-list-category">${translate('listFilters.filterCategory')}</label>
+        <select id="model-list-category" data-saved-list-filter="models" data-filter-name="category">
+          <option value="">${translate('listFilters.allCategories')}</option>
+          ${['text', 'image', 'video', 'audio'].map((category) => {
+            const selected = category === listState.filters.category ? ' selected' : '';
+            return `<option value="${category}"${selected}>${escapeHtml(getCategoryLabel(category))}</option>`;
+          }).join('')}
+        </select>
+      </div>
+    `,
+    translate,
+  });
+}
+
+function renderSavedList({
+  listKey,
+  title,
+  emptyText,
+  items,
+  renderer,
+  filters,
+  page,
+  pageSize,
+  searchFields = [],
+  controls,
+  translate,
+}) {
+  const result = filterAndPaginateSavedItems({
+    items,
+    filters,
+    searchFields,
+    page,
+    pageSize,
+  });
+  tabState.savedLists[listKey].page = result.page;
+  tabState.savedLists[listKey].pageSize = result.pageSize;
+
+  return `
+    <section>
+      <div class="section-title">
+        <h3>${title}</h3>
+      </div>
+      <div class="saved-list-toolbar">
+        ${controls}
+        ${renderSavedListPageSizeControl({ listKey, pageSize: result.pageSize, translate })}
+      </div>
+      ${renderSavedListStatus({ listKey, result, translate })}
+      <div class="card-list">
+        ${
+          result.items.length === 0
+            ? `<div class="card"><span class="meta">${emptyText}</span></div>`
+            : result.items.map(renderer).join('')
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderSavedListPageSizeControl({ listKey, pageSize, translate }) {
+  return `
+    <div class="field">
+      <label for="${listKey}-page-size">${translate('ruleList.pageSize')}</label>
+      <select id="${listKey}-page-size" data-saved-list-page-size="${listKey}">
+        ${[5, 10, 20, 50].map((size) => {
+          const selected = size === pageSize ? ' selected' : '';
+          return `<option value="${size}"${selected}>${size}</option>`;
+        }).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function renderSavedListStatus({ listKey, result, translate }) {
+  return `
+    <div class="rule-list-status">
+      <span>${translate('ruleList.range')
+        .replace('{start}', result.start)
+        .replace('{end}', result.end)
+        .replace('{total}', result.total)}</span>
+      <div class="pagination-actions">
+        <button class="button-secondary" type="button" data-saved-list-page="${listKey}" data-page-direction="prev" ${result.page <= 1 ? 'disabled' : ''}>${translate('ruleList.prev')}</button>
+        <span>${translate('ruleList.page')
+          .replace('{page}', result.page)
+          .replace('{totalPages}', result.totalPages)}</span>
+        <button class="button-secondary" type="button" data-saved-list-page="${listKey}" data-page-direction="next" ${result.page >= result.totalPages ? 'disabled' : ''}>${translate('ruleList.next')}</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderRuleList(translate) {
+  const result = filterAndPaginateRules({
+    rules: state.rules,
+    filters: tabState.ruleFilters,
+    page: tabState.rulePage,
+    pageSize: tabState.rulePageSize,
+  });
+  tabState.rulePage = result.page;
+  tabState.rulePageSize = result.pageSize;
+
+  return `
+    <section>
+      <div class="section-title">
+        <h3>${translate('entry.savedRules')}</h3>
+      </div>
+      <div class="rule-list-toolbar">
+        <div class="field">
+          <label for="rule-filter-platform">${translate('ruleList.filterPlatform')}</label>
+          <select id="rule-filter-platform" data-rule-filter="platformId">
+            <option value="">${translate('ruleList.allPlatforms')}</option>
+            ${state.platforms.map((platform) => {
+              const selected = platform.id === tabState.ruleFilters.platformId ? ' selected' : '';
+              return `<option value="${escapeHtml(platform.id)}"${selected}>${escapeHtml(platform.name)}</option>`;
+            }).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label for="rule-filter-model">${translate('ruleList.filterModel')}</label>
+          <select id="rule-filter-model" data-rule-filter="modelId">
+            <option value="">${translate('ruleList.allModels')}</option>
+            ${state.models.map((model) => {
+              const selected = model.id === tabState.ruleFilters.modelId ? ' selected' : '';
+              return `<option value="${escapeHtml(model.id)}"${selected}>${escapeHtml(model.name)} (${escapeHtml(model.category)})</option>`;
+            }).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label for="rule-page-size">${translate('ruleList.pageSize')}</label>
+          <select id="rule-page-size" data-rule-page-size>
+            ${[5, 10, 20, 50].map((size) => {
+              const selected = size === result.pageSize ? ' selected' : '';
+              return `<option value="${size}"${selected}>${size}</option>`;
+            }).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="rule-list-status">
+        <span>${translate('ruleList.range')
+          .replace('{start}', result.start)
+          .replace('{end}', result.end)
+          .replace('{total}', result.total)}</span>
+        <div class="pagination-actions">
+          <button class="button-secondary" type="button" data-rule-page="prev" ${result.page <= 1 ? 'disabled' : ''}>${translate('ruleList.prev')}</button>
+          <span>${translate('ruleList.page')
+            .replace('{page}', result.page)
+            .replace('{totalPages}', result.totalPages)}</span>
+          <button class="button-secondary" type="button" data-rule-page="next" ${result.page >= result.totalPages ? 'disabled' : ''}>${translate('ruleList.next')}</button>
+        </div>
+      </div>
+      <div class="card-list">
+        ${
+          result.items.length === 0
+            ? `<div class="card"><span class="meta">${translate('ruleList.empty')}</span></div>`
+            : result.items.map((rule) => renderRuleCard(rule, translate)).join('')
+        }
+      </div>
+    </section>
+  `;
+}
+
 function renderPlatformCard(platform, translate) {
   return `
     <article class="card">
@@ -1374,6 +1740,13 @@ window.toggleAllCheckboxes = function(type, checked) {
   updateScenarioFieldVisibility();
 };
 
+function handleToggleAll(event) {
+  const button = event.currentTarget;
+  const type = button.dataset.type;
+  const checked = button.dataset.checked === 'true';
+  window.toggleAllCheckboxes(type, checked);
+}
+
 function bindEvents() {
   document.querySelector('#quick-entry-form')?.addEventListener('submit', handleQuickEntrySubmit);
   document.querySelector('#quick-entry-form')?.addEventListener('input', updateQuickEntryPreview);
@@ -1387,6 +1760,9 @@ function bindEvents() {
   document.querySelectorAll('.compare-checkbox').forEach((cb) => {
     cb.addEventListener('change', updateScenarioFieldVisibility);
   });
+  document.querySelectorAll('[data-action="toggle-all"]').forEach((button) => {
+    button.addEventListener('click', handleToggleAll);
+  });
   document.querySelector('#rule-form')?.addEventListener('input', handleRulePreviewChange);
   document.querySelector('#rule-form')?.addEventListener('change', handleRulePreviewChange);
   document.querySelector('#export-json')?.addEventListener('click', handleExport);
@@ -1395,11 +1771,32 @@ function bindEvents() {
   document.querySelectorAll('[data-tab-group]').forEach((button) => {
     button.addEventListener('click', handleTabClick);
   });
+  document.querySelectorAll('[data-guide-action]').forEach((button) => {
+    button.addEventListener('click', handleGuideAction);
+  });
+  document.querySelectorAll('[data-rule-filter]').forEach((select) => {
+    select.addEventListener('change', handleRuleFilterChange);
+  });
+  document.querySelector('[data-rule-page-size]')?.addEventListener('change', handleRulePageSizeChange);
+  document.querySelectorAll('[data-rule-page]').forEach((button) => {
+    button.addEventListener('click', handleRulePageChange);
+  });
+  document.querySelectorAll('[data-saved-list-filter]').forEach((control) => {
+    control.addEventListener('change', handleSavedListFilterChange);
+  });
+  document.querySelectorAll('[data-saved-list-page-size]').forEach((select) => {
+    select.addEventListener('change', handleSavedListPageSizeChange);
+  });
+  document.querySelectorAll('[data-saved-list-page]').forEach((button) => {
+    button.addEventListener('click', handleSavedListPageChange);
+  });
   document.querySelectorAll('.card-actions').forEach((container) => {
     container.addEventListener('click', handleCardAction);
   });
   document.querySelector('#btn-fullscreen')?.addEventListener('click', openFullscreen);
   document.querySelector('#btn-close-fullscreen')?.addEventListener('click', closeFullscreen);
+  document.querySelector('#btn-download-csv')?.addEventListener('click', downloadCsv);
+  document.querySelector('#btn-download-md')?.addEventListener('click', downloadMd);
   document.querySelector('#platform-selector')?.addEventListener('change', handlePlatformSelectorChange);
   document.querySelector('#btn-add-platform')?.addEventListener('click', handleAddPlatformClick);
   updateRulePreview();
@@ -1411,6 +1808,75 @@ function handleTabClick(event) {
   const button = event.currentTarget;
   tabState[button.dataset.tabGroup] = button.dataset.tabValue;
   render();
+}
+
+function handleGuideAction(event) {
+  const target = resolveGuideActionTarget(event.currentTarget.dataset.guideAction);
+  tabState.entry = target.entry ?? tabState.entry;
+  tabState.controls = target.controls ?? tabState.controls;
+  render();
+}
+
+function handleRuleFilterChange(event) {
+  const filterName = event.currentTarget.dataset.ruleFilter;
+  tabState.ruleFilters = {
+    ...tabState.ruleFilters,
+    [filterName]: event.currentTarget.value,
+  };
+  tabState.rulePage = 1;
+  render();
+}
+
+function handleRulePageSizeChange(event) {
+  tabState.rulePageSize = Number(event.currentTarget.value) || 10;
+  tabState.rulePage = 1;
+  render();
+}
+
+function handleRulePageChange(event) {
+  const direction = event.currentTarget.dataset.rulePage;
+  tabState.rulePage += direction === 'next' ? 1 : -1;
+  render();
+}
+
+function handleSavedListFilterChange(event) {
+  const listKey = event.currentTarget.dataset.savedListFilter;
+  const filterName = event.currentTarget.dataset.filterName;
+  
+  const formState = savePlanFormState();
+  
+  tabState.savedLists[listKey].filters = {
+    ...tabState.savedLists[listKey].filters,
+    [filterName]: event.currentTarget.value,
+  };
+  tabState.savedLists[listKey].page = 1;
+  render();
+  
+  restorePlanFormState(formState);
+}
+
+function handleSavedListPageSizeChange(event) {
+  const listKey = event.currentTarget.dataset.savedListPageSize;
+  
+  const formState = savePlanFormState();
+  
+  tabState.savedLists[listKey].pageSize = Number(event.currentTarget.value) || 10;
+  tabState.savedLists[listKey].page = 1;
+  render();
+  
+  restorePlanFormState(formState);
+}
+
+function handleSavedListPageChange(event) {
+  const listKey = event.currentTarget.dataset.savedListPage;
+  const direction = event.currentTarget.dataset.pageDirection;
+  
+  const formState = savePlanFormState();
+  
+  tabState.savedLists[listKey].page += direction === 'next' ? 1 : -1;
+  render();
+  
+  restorePlanFormState(formState);
 }
 
 function handlePlatformSelectorChange(event) {
@@ -1444,22 +1910,23 @@ async function handleAddPlatformClick() {
 }
 
 function openFullscreen() {
-  const modal = document.querySelector('#fullscreen-modal');
-  if (modal) {
-    modal.style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-  }
+  isFullscreenOpen = true;
+  render();
 }
 
 function closeFullscreen() {
-  const modal = document.querySelector('#fullscreen-modal');
-  if (modal) {
-    modal.style.display = 'none';
-    document.body.style.overflow = '';
-  }
+  isFullscreenOpen = false;
+  render();
 }
 
-function handleRulePreviewChange() {
+function syncFullscreenBodyState() {
+  document.body.style.overflow = isFullscreenOpen ? 'hidden' : '';
+}
+
+function handleRulePreviewChange(event) {
+  if (event?.target?.name === 'platformId') {
+    tabState.selectedPlatformId = event.target.value || null;
+  }
   updateRulePreview();
 }
 
@@ -1470,7 +1937,7 @@ async function handleQuickEntrySubmit(event) {
     const draft = buildQuickEntryDraftFromForm(new FormData(event.currentTarget));
     const result = buildQuickEntryMutation({ state, draft, createId });
     state = await repository.saveState(result.nextState);
-    comparisonRows = [];
+    comparisonRows = clearComparisonRows();
     setFlash('success', t('flash.quickEntrySaved'));
     render();
   } catch (error) {
@@ -1552,6 +2019,11 @@ async function handlePlanSubmit(event) {
     };
     await updateState((draft) => {
       draft.plans.push(plan);
+      draft.lastUsed = {
+        ...draft.lastUsed,
+        planPlatformId: plan.platformId,
+        planBillingCycle: plan.billingCycle,
+      };
     }, t('flash.planSaved'));
   }
   
@@ -1601,6 +2073,7 @@ async function handleRuleSubmit(event) {
   const form = event.currentTarget;
   const formData = new FormData(form);
   const editId = form.dataset.editId;
+  const platformId = String(formData.get('platformId'));
   const modelId = String(formData.get('modelId'));
   const model = state.models.find((item) => item.id === modelId);
   const pricingMode = String(formData.get('pricingMode'));
@@ -1612,7 +2085,6 @@ async function handleRuleSubmit(event) {
   }
 
   if (pricingMode === 'plan_credit_based') {
-    const platformId = String(formData.get('platformId'));
     const platformPlans = state.plans.filter((item) => item.platformId === platformId);
     if (platformPlans.length === 0) {
       setFlash('error', t('flash.requirePlan'));
@@ -1632,10 +2104,12 @@ async function handleRuleSubmit(event) {
     return;
   }
 
+  tabState.selectedPlatformId = platformId || null;
+
   if (editId) {
     const rule = {
       id: editId,
-      platformId: String(formData.get('platformId')),
+      platformId,
       modelId,
       pricingMode,
       currency: String(formData.get('currency')).trim().toUpperCase(),
@@ -1651,7 +2125,7 @@ async function handleRuleSubmit(event) {
   } else {
     const rule = {
       id: createId('rule'),
-      platformId: String(formData.get('platformId')),
+      platformId,
       modelId,
       pricingMode,
       currency: String(formData.get('currency')).trim().toUpperCase(),
@@ -1662,7 +2136,7 @@ async function handleRuleSubmit(event) {
       draft.rules.push(rule);
     }, t('flash.ruleSaved'));
   }
-  
+
   form.reset();
   delete form.dataset.editId;
   const submitButton = form.querySelector('button[type="submit"]');
@@ -1721,6 +2195,7 @@ function handleComparisonSubmit(event) {
   };
 
   if (platformIds.length === 0 || modelIds.length === 0) {
+    isFullscreenOpen = false;
     setFlash('error', t('flash.requireSelection'));
     render();
     return;
@@ -1728,8 +2203,10 @@ function handleComparisonSubmit(event) {
 
   try {
     comparisonRows = buildComparisonRows({ state, filters });
+    isFullscreenOpen = shouldAutoOpenFullscreen(comparisonRows);
     setFlash('success', `${t('flash.generatedPrefix')} ${comparisonRows.length} ${t('flash.generatedSuffix')}`);
   } catch (error) {
+    isFullscreenOpen = false;
     setFlash('error', error instanceof Error ? error.message : t('flash.generateFailed'));
   }
 
@@ -1844,6 +2321,7 @@ function populateModelForm(model, translate) {
 function populateRuleForm(rule, translate) {
   const form = document.querySelector('#rule-form');
   if (!form) return;
+  tabState.selectedPlatformId = rule.platformId;
   form.dataset.editId = rule.id;
   form.querySelector('#rule-platform-id').value = rule.platformId;
   form.querySelector('#rule-model-id').value = rule.modelId;
@@ -1880,21 +2358,21 @@ function getUnitInputName(unitType) {
 
 async function deletePlatform(id) {
   state = await repository.saveState(deletePlatformWithDependents(state, id));
-  comparisonRows = clearComparisonRowsAfterSavedDataChange();
+  comparisonRows = clearComparisonRows();
   setFlash('success', t('flash.platformDeleted'));
   render();
 }
 
 async function deletePlan(id) {
   state = await repository.saveState(deletePlanWithDependents(state, id));
-  comparisonRows = clearComparisonRowsAfterSavedDataChange();
+  comparisonRows = clearComparisonRows();
   setFlash('success', t('flash.planDeleted'));
   render();
 }
 
 async function deleteModel(id) {
   state = await repository.saveState(deleteModelWithDependents(state, id));
-  comparisonRows = clearComparisonRowsAfterSavedDataChange();
+  comparisonRows = clearComparisonRows();
   setFlash('success', t('flash.modelDeleted'));
   render();
 }
@@ -1903,7 +2381,7 @@ async function deleteRule(id) {
   const nextState = structuredClone(state);
   nextState.rules = nextState.rules.filter((item) => item.id !== id);
   state = await repository.saveState(nextState);
-  comparisonRows = clearComparisonRowsAfterSavedDataChange();
+  comparisonRows = clearComparisonRows();
   setFlash('success', t('flash.ruleDeleted'));
   render();
 }
@@ -1954,7 +2432,7 @@ async function handleImport(event) {
       ...imported,
     });
     state = await repository.loadState();
-    comparisonRows = [];
+    comparisonRows = clearComparisonRows();
     setFlash('success', t('flash.importDone'));
     render();
   } catch (error) {
@@ -1975,7 +2453,7 @@ async function handleLoadDemo() {
     preferences: { locale: 'zh-CN', targetCurrency: 'CNY' },
   });
   state = await repository.loadState();
-  comparisonRows = [];
+  comparisonRows = clearComparisonRows();
   tabState.entry = 'quickEntry';
   tabState.controls = 'comparison';
   setFlash('success', t('flash.demoLoaded'));
@@ -1986,7 +2464,7 @@ async function updateState(mutator, successMessage) {
   const draft = structuredClone(state);
   mutator(draft);
   state = await repository.saveState(draft);
-  comparisonRows = clearComparisonRowsAfterSavedDataChange(comparisonRows);
+  comparisonRows = clearComparisonRows(comparisonRows);
   setFlash('success', successMessage);
   render();
 }
@@ -2309,6 +2787,118 @@ function getUnitTypeLabel(unitType) {
 
 function setFlash(type, message) {
   flash = { type, message };
+}
+
+function clearComparisonRows(rows = []) {
+  isFullscreenOpen = false;
+  return clearComparisonRowsAfterSavedDataChange(rows);
+}
+
+function savePlanFormState() {
+  const form = document.querySelector('#plan-form');
+  if (!form) return null;
+  
+  const formData = new FormData(form);
+  return {
+    name: form.querySelector('#plan-name')?.value || '',
+    price: form.querySelector('#plan-price')?.value || '',
+    currency: form.querySelector('#plan-currency')?.value || '',
+    billingCycle: form.querySelector('#plan-cycle')?.value || 'monthly',
+    creditAmount: form.querySelector('#plan-credits')?.value || '',
+    notes: form.querySelector('#plan-notes')?.value || '',
+  };
+}
+
+function restorePlanFormState(formState) {
+  if (!formState) return;
+  
+  const form = document.querySelector('#plan-form');
+  if (!form) return;
+  
+  const nameInput = form.querySelector('#plan-name');
+  const priceInput = form.querySelector('#plan-price');
+  const currencyInput = form.querySelector('#plan-currency');
+  const cycleSelect = form.querySelector('#plan-cycle');
+  const creditsInput = form.querySelector('#plan-credits');
+  const notesInput = form.querySelector('#plan-notes');
+  
+  if (nameInput) nameInput.value = formState.name;
+  if (priceInput) priceInput.value = formState.price;
+  if (currencyInput) currencyInput.value = formState.currency;
+  if (cycleSelect) cycleSelect.value = formState.billingCycle;
+  if (creditsInput) creditsInput.value = formState.creditAmount;
+  if (notesInput) notesInput.value = formState.notes;
+}
+
+function downloadCsv() {
+  if (comparisonRows.length === 0) {
+    setFlash('error', '没有数据可下载');
+    render();
+    return;
+  }
+
+  const targetCurrency = state.preferences?.targetCurrency ?? 'CNY';
+  const headers = ['网站', '模型', '类型', '计费方式', '套餐', '原币种单价', '目标币种单价', '本次成本'];
+  const rows = comparisonRows.map(row => [
+    row.platformName,
+    row.modelName,
+    getCategoryLabel(row.category),
+    getPricingModeLabel(row.pricingMode),
+    row.planName || '-',
+    row.originalUnitCost != null ? `${row.originalUnitCost} ${row.originalCurrency}` : '-',
+    row.convertedUnitCost != null ? `${row.convertedUnitCost} ${targetCurrency}` : '-',
+    row.singleRunCost != null ? `${row.singleRunCost} ${targetCurrency}` : '-',
+  ]);
+
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `ai-price-compare-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function downloadMd() {
+  if (comparisonRows.length === 0) {
+    setFlash('error', '没有数据可下载');
+    render();
+    return;
+  }
+
+  const targetCurrency = state.preferences?.targetCurrency ?? 'CNY';
+  const headers = ['网站', '模型', '类型', '计费方式', '套餐', '原币种单价', '目标币种单价', '本次成本'];
+  const rows = comparisonRows.map(row => [
+    row.platformName,
+    row.modelName,
+    getCategoryLabel(row.category),
+    getPricingModeLabel(row.pricingMode),
+    row.planName || '-',
+    row.originalUnitCost != null ? `${row.originalUnitCost} ${row.originalCurrency}` : '-',
+    row.convertedUnitCost != null ? `${row.convertedUnitCost} ${targetCurrency}` : '-',
+    row.singleRunCost != null ? `${row.singleRunCost} ${targetCurrency}` : '-',
+  ]);
+
+  const mdContent = [
+    `# AI SaaS 价格对比结果`,
+    '',
+    `导出时间：${new Date().toLocaleString('zh-CN')}`,
+    `目标币种：${targetCurrency}`,
+    '',
+    '| ' + headers.join(' | ') + ' |',
+    '| ' + headers.map(() => '---').join(' | ') + ' |',
+    ...rows.map(row => '| ' + row.join(' | ') + ' |'),
+  ].join('\n');
+
+  const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `ai-price-compare-${new Date().toISOString().slice(0, 10)}.md`;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 function escapeHtml(value) {
