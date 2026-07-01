@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { calculateChartLayout, renderBarChart } from '../src/options/chart.js';
 import {
   buildComparisonRows,
   buildUnitDefinitions,
@@ -14,6 +15,43 @@ import {
   resolveRememberedPlatformId,
   shouldAutoOpenFullscreen,
 } from '../src/options/helpers.js';
+
+test('calculates a scrollable chart width for many comparison bars', () => {
+  assert.deepEqual(calculateChartLayout({ itemCount: 24 }), {
+    width: 1800,
+    height: 320,
+    plotTop: 32,
+    plotRight: 24,
+    plotBottom: 78,
+    plotLeft: 24,
+    barWidth: 44,
+    itemGap: 31,
+    step: 75,
+    plotHeight: 210,
+  });
+});
+
+test('keeps chart width at least as wide as the visible container', () => {
+  assert.equal(calculateChartLayout({ itemCount: 2 }).width, 520);
+});
+
+test('keeps the full x-axis label available for chart hover tooltips', () => {
+  const label = 'dreamwith.art (Nano Banana Pro - 4k ultra long package name)';
+  const chartMarkup = renderBarChart({
+    items: [{ label, value: 1.23 }],
+    minValue: 1.23,
+    maxValue: 1.23,
+    groupMaxValue: 1.23,
+  });
+
+  assert.match(chartMarkup, /data-chart-tooltip=/);
+  assert.match(chartMarkup, new RegExp(escapeRegExp(label)));
+  assert.match(chartMarkup, /dreamwith\.art \(Nano Ban\.\.\./);
+});
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 test('builds image unit definitions from form values', () => {
   const unitDefinitions = buildUnitDefinitions({

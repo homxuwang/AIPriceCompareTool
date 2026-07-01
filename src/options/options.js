@@ -35,6 +35,7 @@ import {
   createTranslator,
 } from './messages.js';
 import { normalizeDirectUnitDefinitions } from './unit-normalization.js';
+import { renderBarChart } from './chart.js';
 
 const app = document.querySelector('#app');
 const repository = canUseChromeStorage()
@@ -1307,7 +1308,6 @@ function renderModelComparisonChart(groupedByModel, targetCurrency, translate) {
 
   const allCosts = chartData.flatMap((d) => d.platforms.map((p) => p.singleRunCost));
   const maxCost = Math.max(...allCosts);
-  const chartHeight = 200;
 
   return `
     <div class="chart-section">
@@ -1326,24 +1326,15 @@ function renderModelComparisonChart(groupedByModel, targetCurrency, translate) {
                   <span class="legend-item legend-max">${translate('results.highest')}: ${modelMax} ${escapeHtml(targetCurrency)}</span>
                 </div>
               </div>
-              <div class="chart-bars">
-                ${modelData.platforms.map((platform) => {
-                  const barHeight = maxCost > 0 ? (platform.singleRunCost / maxCost) * chartHeight : 0;
-                  const isMin = platform.singleRunCost === modelMin && modelData.platforms.length > 1;
-                  const isMax = platform.singleRunCost === modelMax && modelData.platforms.length > 1;
-                  const label = platform.planName 
-                    ? `${platform.platformName} (${platform.planName})` 
-                    : platform.platformName;
-                  return `
-                    <div class="chart-bar-wrapper">
-                      <div class="chart-bar ${isMin ? 'bar-min' : ''} ${isMax ? 'bar-max' : ''}" style="height: ${barHeight}px;">
-                        <span class="chart-bar-value">${platform.singleRunCost}</span>
-                      </div>
-                      <div class="chart-bar-label">${escapeHtml(label)}</div>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
+              ${renderBarChart({
+                items: modelData.platforms.map((platform) => ({
+                  label: formatChartLabel(platform),
+                  value: platform.singleRunCost,
+                })),
+                minValue: modelMin,
+                maxValue: modelMax,
+                groupMaxValue: maxCost,
+              })}
             </div>
           `;
         }).join('')}
@@ -1374,7 +1365,6 @@ function renderTotalCostChart(groupedByModel, targetCurrency, translate, scenari
 
   const allCosts = chartData.flatMap((d) => d.platforms.map((p) => p.totalCost));
   const maxCost = Math.max(...allCosts);
-  const chartHeight = 200;
 
   return `
     <div class="chart-section">
@@ -1394,30 +1384,104 @@ function renderTotalCostChart(groupedByModel, targetCurrency, translate, scenari
                   <span class="legend-item legend-max">${translate('results.highest')}: ${modelMax} ${escapeHtml(targetCurrency)}</span>
                 </div>
               </div>
-              <div class="chart-bars">
-                ${modelData.platforms.map((platform) => {
-                  const barHeight = maxCost > 0 ? (platform.totalCost / maxCost) * chartHeight : 0;
-                  const isMin = platform.totalCost === modelMin && modelData.platforms.length > 1;
-                  const isMax = platform.totalCost === modelMax && modelData.platforms.length > 1;
-                  const label = platform.planName 
-                    ? `${platform.platformName} (${platform.planName})` 
-                    : platform.platformName;
-                  return `
-                    <div class="chart-bar-wrapper">
-                      <div class="chart-bar ${isMin ? 'bar-min' : ''} ${isMax ? 'bar-max' : ''}" style="height: ${barHeight}px;">
-                        <span class="chart-bar-value">${platform.totalCost}</span>
-                      </div>
-                      <div class="chart-bar-label">${escapeHtml(label)}</div>
-                    </div>
-                  `;
-                }).join('')}
-              </div>
+              ${renderBarChart({
+                items: modelData.platforms.map((platform) => ({
+                  label: formatChartLabel(platform),
+                  value: platform.totalCost,
+                })),
+                minValue: modelMin,
+                maxValue: modelMax,
+                groupMaxValue: maxCost,
+              })}
             </div>
           `;
         }).join('')}
       </div>
     </div>
   `;
+}
+
+function formatChartLabel(platform) {
+  return platform.planName
+    ? `${platform.platformName} (${platform.planName})`
+    : platform.platformName;
+}
+
+function enableChartDragScrolling() {
+  document.querySelectorAll('.chart-scroll').forEach((scrollContainer) => {
+    if (scrollContainer.scrollWidth <= scrollContainer.clientWidth) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startScrollLeft = 0;
+
+    scrollContainer.addEventListener('pointerdown', (event) => {
+      isDragging = true;
+      startX = event.clientX;
+      startScrollLeft = scrollContainer.scrollLeft;
+      scrollContainer.classList.add('is-dragging');
+      scrollContainer.setPointerCapture(event.pointerId);
+    });
+
+    scrollContainer.addEventListener('pointermove', (event) => {
+      if (!isDragging) return;
+      event.preventDefault();
+      scrollContainer.scrollLeft = startScrollLeft - (event.clientX - startX);
+    });
+
+    const stopDragging = (event) => {
+      if (!isDragging) return;
+      isDragging = false;
+      scrollContainer.classList.remove('is-dragging');
+      if (scrollContainer.hasPointerCapture(event.pointerId)) {
+        scrollContainer.releasePointerCapture(event.pointerId);
+      }
+    };
+
+    scrollContainer.addEventListener('pointerup', stopDragging);
+    scrollContainer.addEventListener('pointercancel', stopDragging);
+  });
+}
+
+function enableChartLabelTooltips() {
+  let tooltip = null;
+
+  const moveTooltip = (event) => {
+    if (!tooltip) return;
+
+    const offset = 14;
+    const maxLeft = window.innerWidth - tooltip.offsetWidth - 12;
+    const maxTop = window.innerHeight - tooltip.offsetHeight - 12;
+    tooltip.style.left = `${Math.max(12, Math.min(event.clientX + offset, maxLeft))}px`;
+    tooltip.style.top = `${Math.max(12, Math.min(event.clientY + offset, maxTop))}px`;
+  };
+
+  const hideTooltip = () => {
+    tooltip?.remove();
+    tooltip = null;
+  };
+
+  const showTooltip = (event) => {
+    const label = event.currentTarget.dataset.chartTooltip;
+    if (!label) return;
+
+    hideTooltip();
+    tooltip = document.createElement('div');
+    tooltip.className = 'chart-tooltip';
+    tooltip.textContent = label;
+    document.body.append(tooltip);
+    moveTooltip(event);
+  };
+
+  document.querySelectorAll('[data-chart-tooltip]').forEach((label) => {
+    label.addEventListener('pointerenter', showTooltip);
+    label.addEventListener('pointermove', moveTooltip);
+    label.addEventListener('pointerleave', hideTooltip);
+    label.addEventListener('pointercancel', hideTooltip);
+    label.addEventListener('mouseenter', showTooltip);
+    label.addEventListener('mousemove', moveTooltip);
+    label.addEventListener('mouseleave', hideTooltip);
+  });
 }
 
 function renderCards(title, items, renderer, translate) {
@@ -1802,6 +1866,8 @@ function bindEvents() {
   updateRulePreview();
   updateQuickEntryPreview();
   updateScenarioFieldVisibility();
+  enableChartDragScrolling();
+  enableChartLabelTooltips();
 }
 
 function handleTabClick(event) {

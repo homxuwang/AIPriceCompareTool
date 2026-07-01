@@ -535,17 +535,15 @@ button:hover,
 }
 
 .chart-container {
-  display: flex;
-  gap: 30px;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  gap: 24px;
 }
 
 .chart-group {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  min-width: 200px;
+  align-items: stretch;
+  min-width: 0;
   padding: 16px;
   border: 1px solid #e5d4b6;
   border-radius: 12px;
@@ -571,6 +569,8 @@ button:hover,
   display: flex;
   gap: 12px;
   font-size: 11px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .legend-item {
@@ -587,84 +587,94 @@ button:hover,
   color: #991b1b;
 }
 
-.chart-bars {
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-  height: 200px;
+.chart-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0 10px;
+  scrollbar-color: #c9a876 #fff4df;
+  scrollbar-width: thin;
+  cursor: grab;
 }
 
-.chart-bar-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
+.chart-scroll:focus {
+  outline: 2px solid rgba(22, 120, 111, 0.35);
+  outline-offset: 2px;
 }
 
-.chart-bar {
-  width: 40px;
-  background: linear-gradient(180deg, #d4a574 0%, #b8956a 100%);
-  border-radius: 6px 6px 0 0;
-  position: relative;
-  min-height: 4px;
-  transition: height 0.3s ease;
+.chart-scroll.is-dragging {
+  cursor: grabbing;
+  user-select: none;
 }
 
-.chart-bar:hover {
-  background: linear-gradient(180deg, #c49564 0%, #a8855a 100%);
+.chart-svg {
+  display: block;
+  min-width: 100%;
 }
 
-.chart-bar.bar-min {
-  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+.chart-axis {
+  stroke: #ead9bb;
+  stroke-width: 1;
 }
 
-.chart-bar.bar-min:hover {
-  background: linear-gradient(180deg, #16a34a 0%, #15803d 100%);
+.chart-bar-rect {
+  fill: #c99c6a;
+  transition: fill 0.2s ease;
 }
 
-.chart-bar.bar-max {
-  background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+.chart-bar-rect:hover {
+  fill: #aa7f4f;
 }
 
-.chart-bar.bar-max:hover {
-  background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
+.chart-bar-rect.bar-min {
+  fill: #22a45d;
+}
+
+.chart-bar-rect.bar-min:hover {
+  fill: #178348;
+}
+
+.chart-bar-rect.bar-max {
+  fill: #d44c4c;
+}
+
+.chart-bar-rect.bar-max:hover {
+  fill: #b53232;
 }
 
 .chart-bar-value {
-  position: absolute;
-  top: -24px;
-  left: 50%;
-  transform: translateX(-50%);
   font-size: 11px;
   font-weight: 600;
-  color: #44403c;
-  white-space: nowrap;
+  fill: #44403c;
 }
 
 .chart-bar-label {
   font-size: 11px;
-  color: #78716c;
-  text-align: center;
-  writing-mode: horizontal-tb;
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transform: rotate(-45deg);
-  transform-origin: center top;
-  margin-top: 8px;
-  position: relative;
+  fill: #78716c;
+  cursor: help;
+  pointer-events: auto;
 }
 
-.chart-bar-label:hover {
-  overflow: visible;
-  white-space: normal;
-  z-index: 10;
-  background: #fff;
-  border: 1px solid #ead9bb;
-  border-radius: 4px;
-  padding: 4px 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+.chart-label-hitbox {
+  fill: transparent;
+  cursor: help;
+  pointer-events: all;
+}
+
+.chart-tooltip {
+  position: fixed;
+  z-index: 3000;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 8px 10px;
+  border: 1px solid #d6bf9c;
+  border-radius: 8px;
+  background: #fffaf0;
+  color: #2f2922;
+  box-shadow: 0 10px 28px rgba(33, 45, 42, 0.16);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  pointer-events: none;
 }
 
 .form-step {
@@ -1450,11 +1460,6 @@ th {
 
 .fullscreen-body .comparison-table td {
   background: #fff;
-}
-
-.fullscreen-body .chart-bar-label {
-  transform: rotate(-45deg);
-  max-width: 100px;
 }
 
 @media (max-width: 768px) {
